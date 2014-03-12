@@ -9,7 +9,7 @@ import sklearn.cross_validation
 
 
 config_template = \
-"""[DEFAULT]
+"""[HPOLIB]
 function = %s
 numberOfJobs = %d
 result_on_terminate = %f
@@ -23,6 +23,16 @@ def configure_config_template(function, number_of_jobs=200,
 
 
 def create_hpolib_dir(dataset, file_dir, template_dir, target_dir):
+    """Create an experiment directory for the HPOlib package. Copies stuff
+    from the template directories to the target directories.
+
+    Inputs:
+    * dataset: the name of the dataset
+    * file_dir: the directory the dataset resides in
+    * template_dir: directory of the HPOlib experiment template
+    * target_dir: target for the created experiment directory
+
+    """
     dataset_dir = os.path.abspath(os.path.join(file_dir, dataset))
 
     if target_dir is None:
@@ -32,21 +42,10 @@ def create_hpolib_dir(dataset, file_dir, template_dir, target_dir):
     if not os.path.exists(target_dir):
         os.mkdir(target_dir)
 
-    fh = open(os.path.join(dataset_dir, dataset + ".pkl"))
-    ds = cPickle.load(fh)
-    fh.close()
-    X, Y = ds.get_processed_files()
-    kf = sklearn.cross_validation.StratifiedKFold(Y, n_folds=3, indices=True)
-    for i, splits  in enumerate(kf):
-        train_split, test_split = splits
+    for i in range(3):
         output_dir = os.path.join(target_dir, os.path.basename(dataset) +
-                                  "fold%d" % i)
+                                  "_fold%d" % i)
         shutil.copytree(template_dir, output_dir, symlinks=True)
-
-        np.save(os.path.join(output_dir, "train.npy"), X[train_split])
-        np.save(os.path.join(output_dir, "train_targets.npy"), Y[train_split])
-        np.save(os.path.join(output_dir, "test.npy"), X[test_split])
-        np.save(os.path.join(output_dir, "test_targets.npy"), Y[test_split])
 
 
 if __name__ == "__main__":

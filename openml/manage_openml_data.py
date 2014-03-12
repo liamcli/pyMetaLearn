@@ -84,8 +84,18 @@ def parse_dataset_id_name_json(json_string):
 
 
 def download(local_directory, dids):
-    """Downloads datasets belonging to the dataset ids given in the array dids"""
+    """Downloads datasets.
+
+    arguments:
+    - local_directory: local working directory where the dataset will be
+        downloaded to
+    - dids: a single integer or a list of integers representing dataset ids.
+    returns:
+    - a list of dataset objects."""
     datasets = []
+    if isinstance(dids, int):
+        dids = [dids]
+
     for did in dids:
         if type(did) is not int:
             raise ValueError("%s is not of type integer. Are you sure that the "

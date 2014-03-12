@@ -1,19 +1,18 @@
+from collections import OrderedDict
+import cPickle
 import numpy as np
-import os
+import numpy.ma as ma
 import sys
 import time
-import re
-
-import arff
 
 import sklearn
 import sklearn.datasets
 import sklearn.utils
-import sklearn.cross_validation
+import sklearn.cross_validation as cross_validation
 import sklearn.svm
 
 import HPOlib.benchmark_util as benchmark_util
-import HPOlib.data_util as data_util
+import HPOlib.wrapping_util as wrapping_util
 
 
 # Specify the size of the kernel test_cache (in MB)
@@ -56,59 +55,153 @@ def data_has_missing_values(X):
     return not np.isfinite(X).all()
 
 
-def normalize(X):
-    X_min = np.min(X, axis=0)
-    X_max = np.max(X, axis=0)
-    return (X - X_min) / (X_max - X_min)
-
-
-def impute_missing_values(data, strategy='mean'):
-    if strategy != 'mean':
-        raise NotImplementedError()
-    pass
-
-
-def split_data(X, Y, fold, folds):
+def get_fold(X, Y, fold, folds):
     assert fold < folds
     # do stratified cross validation, like OpenML does according to the MySQL
     # dump.
-    kf = sklearn.cross_validation.StratifiedKFold(Y, n_folds=folds,
-        indices=True)
+    print fold, "/", folds
+    kf = cross_validation.StratifiedKFold(Y, n_folds=folds, indices=True)
     for idx, split in enumerate(kf):
         if idx == fold:
             return split
-
-
-def load_data():
-    X_train = data_util.load_file("../train.npy", "numpy", 100)
-    Y_train = data_util.load_file("../train_targets.npy", "numpy", 100)
-    X_test = data_util.load_file("../test.npy", "numpy", 100)
-    Y_test = data_util.load_file("../test_targets.npy", "numpy", 100)
-    return X_train, Y_train, X_test, Y_test
 
 
 def fit(params, data):
     C = 2.**(float(params["C"]))
     gamma = 2.**(float(params["gamma"]))
 
-    #print "C: 2^%f=%f, gamma: 2^%f=%f" % (int(float(params["C"])), C,
-    #                                int(float(params["gamma"])), gamma)
-
     random_state = sklearn.utils.check_random_state(42)
     svm = sklearn.svm.SVC(cache_size=SVM_CACHE_SIZE, C=C, gamma=gamma,
                           kernel="rbf", random_state=random_state)
-    print data["train_X"].shape, data["train_Y"].shape
     svm.fit(data["train_X"], data["train_Y"])
+
     predictions = svm.predict(data["valid_X"])
     accuracy = sklearn.metrics.accuracy_score(data["valid_Y"], predictions)
-    # print sklearn.metrics.classification_report(data["test_Y"], predictions)
-    # maybe build a classification report
     return accuracy
+
+
+def convert_pandas_to_npy(X):
+    """Nominal values are replaced with a one hot encoding and missing
+     values represented with zero."""
+    num_fields = 0
+    attribute_arrays = []
+    keys = []
+
+    for idx, attribute in enumerate(X.iteritems()):
+        attribute_name = attribute[0].lower()
+        attribute_type = attribute[1].dtype
+        row = attribute[1]
+
+        if attribute_type == np.float64:
+            rval = _parse_numeric(row)
+            if rval is not None:
+                keys.append(attribute_name)
+                attribute_arrays.append(rval)
+                num_fields += 1
+
+        elif attribute_type == 'object':
+            rval = _parse_nominal(row)
+            if rval is not None:
+                attribute_arrays.append(rval)
+                num_fields += rval.shape[1]
+                if rval.shape[1] == 1:
+                    keys.append(attribute_name)
+                else:
+                    vals = [attribute_name + ":" + str(possible_value) for
+                            possible_value in range(rval.shape[1])]
+                    keys.extend(vals)
+
+        else:
+            raise NotImplementedError()
+
+    dataset_array = np.ndarray((X.shape[0], num_fields))
+    col_idx = 0
+    for attribute_array in attribute_arrays:
+        print attribute_array.shape
+        length = attribute_array.shape[1]
+        dataset_array[:, col_idx:col_idx + length] = attribute_array
+        col_idx += length
+    return dataset_array
+
+
+def encode_labels(row):
+    discrete_values = set(row)
+    discrete_values.discard(None)
+    discrete_values.discard(np.NaN)
+    # Adds reproduceability over multiple systems
+    discrete_values = sorted(discrete_values)
+    encoding = OrderedDict()
+    for row_idx, possible_value in enumerate(discrete_values):
+        encoding[possible_value] = row_idx
+    return encoding
+
+
+def _parse_nominal(row):
+    # This few lines perform a OneHotEncoding, where missing
+    # values represented by none of the attributes being active (
+    # a feature which i could not implement with sklearn).
+    # Different imputation strategies can easily be added by
+    # extracting a method from the else clause.
+    # Caution: this methodology only keeps values that are
+    # encountered in the dataset. If this is a subset of the
+    # possible values of the arff file, only the subset is
+    # encoded via the OneHotEncoding
+    encoding = encode_labels(row)
+
+    if len(encoding) == 0:
+        return None
+
+    array = np.zeros((row.shape[0], len(encoding)))
+
+    for row_idx, value in enumerate(row):
+        if row[row_idx] is not None:
+            array[row_idx][encoding[row[row_idx]]] = 1
+
+    return array
+
+
+def _parse_numeric(row):
+    # NaN and None will be treated as missing values
+    array = np.array(row).reshape((-1, 1))
+
+    if not np.any(np.isfinite(array)):
+        return None
+
+    # Apply scaling here so that if we are setting missing values
+    # to zero, they are still zero afterwards
+    X_min = np.nanmin(array, axis=0)
+    X_max = np.nanmax(array, axis=0)
+    # Numerical stability...
+    if (X_max - X_min) > 0.0000000001:
+        array = (array - X_min) / (X_max - X_min)
+
+    # Replace invalid values (~np.isfinite)
+    fixed_array = ma.fix_invalid(array, copy=True, fill_value=0)
+
+    if not np.isfinite(fixed_array).all():
+        print fixed_array
+        raise NotImplementedError()
+
+    return fixed_array
 
 
 def main(params, **kwargs):
     fold = int(kwargs["fold"])
     folds = int(kwargs["folds"])
+
+    if ("dataset_file" in kwargs and "test_folds" in kwargs and "test_fold" in kwargs):
+        test_fold = int(kwargs["test_fold"])
+        test_folds = int(kwargs["test_folds"])
+        dataset_file = kwargs["dataset_file"]
+    else:
+        config = wrapping_util.load_experiment_config_file()
+        test_fold = config.getint("EXPERIMENT", "test_fold")
+        test_folds = config.getint("EXPERIMENT", "test_folds")
+        dataset_file = config.get("EXPERIMENT", "dataset")
+
+    # 4. Do column-wise pre-processing and insert the values into the numpy
+    #    array
+    # 5. Run the libSVM
 
     # kwargs["iris_data"] = sklearn.datasets.load_iris()
 
@@ -122,7 +215,35 @@ def main(params, **kwargs):
         raise NotImplementedError()
 
     else:
-        X_train, Y_train, X_test,  Y_test = load_data()
+        with open(dataset_file) as fh:
+            dataset = cPickle.load(fh)
+        X, Y = dataset.get_processed_files()
+        X = convert_pandas_to_npy(X)
+        if Y.dtype == np.float64:
+            raise ValueError("SVC is used for classification, the target "
+                             "values are float values which implies this is a "
+                             "regression task")
+        elif Y.dtype == 'object':
+            encoding = encode_labels(Y)
+            Y = np.array([encoding[value] for value in Y])
+        else:
+            raise NotImplementedError(Y.dtype)
+
+    rs = np.random.RandomState(42)
+    indices = np.arange(X.shape[0])
+    rs.shuffle(indices)
+    X = X[indices]
+    Y = Y[indices]
+
+    print "Loaded Data X %s and Y %s" % (str(X.shape), str(Y.shape))
+
+    # Split the dataset according to test_fold and test_folds
+    split = get_fold(X, Y, fold=test_fold, folds=test_folds)
+    X_train = X[split[0]]
+    X_test = X[split[1]]
+    Y_train = Y[split[0]]
+    Y_test = Y[split[1]]
+    print Y_train
 
     if data_has_categorical_values(X_train) or data_has_categorical_values(X_test):
         raise NotImplementedError()
@@ -131,7 +252,7 @@ def main(params, **kwargs):
     if data_has_missing_values(X_train) or data_has_missing_values(X_test):
         raise NotImplementedError()
 
-    train_mask, valid_mask = split_data(X_train, Y_train, fold, folds)
+    train_mask, valid_mask = get_fold(X_train, Y_train, fold, folds)
     data = dict()
     data["train_X"] = X_train[train_mask]
     data["train_Y"] = Y_train[train_mask]

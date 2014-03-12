@@ -1,12 +1,6 @@
 from collections import defaultdict
 from collections import OrderedDict
-import os
-
-import arff
 import numpy as np
-import pandas as pd
-
-from openml.openml_dataset import OpenMLDataset
 
 
 class MetafeatureFunctions:
@@ -205,3 +199,6 @@ def calculate_all_metafeatures(X, Y):
     for name in metafeatures:
         mf[name] = metafeatures[name](X, Y)
     return mf
+
+def calculate_missing_metafeatures(X, Y, dict_):
+    raise NotImplementedError()
