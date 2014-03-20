@@ -11,9 +11,9 @@ import sklearn.cross_validation
 config_template = \
 """[HPOLIB]
 function = %s
-numberOfJobs = %d
+number_of_jobs = %d
 result_on_terminate = %f
-numberCV = %d
+number_cv = %d
     """
 def configure_config_template(function, number_of_jobs=200,
                               result_on_terminate=1,

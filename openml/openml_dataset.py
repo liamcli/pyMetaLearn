@@ -3,18 +3,16 @@ __author__ = 'feurerm'
 import cPickle
 from collections import OrderedDict
 import os
-import sys
 import time
 import urllib2
 
 import arff
 import numpy as np
-import numpy.ma as ma
 import pandas as pd
 
-sys.path.append("..")
-from dataset import Dataset
-from metafeatures.metafeatures import calculate_all_metafeatures
+import pyMetaLearn.openml.manage_openml_data
+from pyMetaLearn.dataset import Dataset
+from pyMetaLearn.metafeatures.metafeatures import calculate_all_metafeatures
 
 
 class OpenMLDataset(Dataset):
@@ -29,8 +27,10 @@ class OpenMLDataset(Dataset):
 
     # todo: think whether the if/else is safe
     def get_processed_files(self):
-        x_path = os.path.join(self._output_directory, "x.df")
-        y_path = os.path.join(self._output_directory, "y.df")
+        x_path = os.path.join(self.openMLBasePath(),
+                              self._local_directory, "x.df")
+        y_path = os.path.join(self.openMLBasePath(),
+                              self._local_directory, "y.df")
         if not (os.path.exists(x_path) and os.path.exists(y_path)):
             self.get_unprocessed_files()
             x, y = self._prepare_dataset()
@@ -45,7 +45,9 @@ class OpenMLDataset(Dataset):
 
     def get_unprocessed_files(self):
         output_filename = "did" + str(self._id) + "_" + self._name + ".arff"
-        output_path = os.path.join(self._output_directory, output_filename)
+        output_path = os.path.join(self.openMLBasePath(),
+                                   self._local_directory,
+                                   output_filename)
         if not os.path.exists(output_path):
             return self._fetch_dataset(output_path)
         else:
@@ -109,7 +111,8 @@ class OpenMLDataset(Dataset):
         x.to_csv(file_handle)
 
     def get_metafeatures(self):
-        metafeatures_filename = os.path.join(self._output_directory,
+        metafeatures_filename = os.path.join(self.openMLBasePath(),
+                                             self._local_directory,
                                              "metafeatures.pkl")
         if os.path.exists(metafeatures_filename):
             with open(metafeatures_filename) as fh:
@@ -125,3 +128,6 @@ class OpenMLDataset(Dataset):
         connection = urllib2.urlopen(url)
         response = connection.read()
         return response
+
+    def openMLBasePath(self):
+        return pyMetaLearn.openml.manage_openml_data.get_local_directory()

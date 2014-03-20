@@ -50,4 +50,5 @@ nosetests.xml
 .idea
 
 # Others
+coverage_html
 *~

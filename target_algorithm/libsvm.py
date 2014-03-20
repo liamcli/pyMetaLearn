@@ -2,8 +2,11 @@ from collections import OrderedDict
 import cPickle
 import numpy as np
 import numpy.ma as ma
+import os
 import sys
 import time
+
+print sys.path
 
 import sklearn
 import sklearn.datasets
@@ -13,6 +16,8 @@ import sklearn.svm
 
 import HPOlib.benchmark_util as benchmark_util
 import HPOlib.wrapping_util as wrapping_util
+
+from pyMetaLearn.dataset_base import DatasetBase
 
 
 # Specify the size of the kernel test_cache (in MB)
@@ -197,13 +202,7 @@ def main(params, **kwargs):
         config = wrapping_util.load_experiment_config_file()
         test_fold = config.getint("EXPERIMENT", "test_fold")
         test_folds = config.getint("EXPERIMENT", "test_folds")
-        dataset_file = config.get("EXPERIMENT", "dataset")
-
-    # 4. Do column-wise pre-processing and insert the values into the numpy
-    #    array
-    # 5. Run the libSVM
-
-    # kwargs["iris_data"] = sklearn.datasets.load_iris()
+        dataset_key = config.get("EXPERIMENT", "dataset")
 
     if "iris_data" in kwargs:
         iris_data = kwargs["iris_data"]
@@ -214,9 +213,13 @@ def main(params, **kwargs):
     elif "data_files" in kwargs:
         raise NotImplementedError()
 
+    elif os.path.exists(dataset_key):
+        raise NotImplementedError()
+
     else:
-        with open(dataset_file) as fh:
-            dataset = cPickle.load(fh)
+        base = DatasetBase()
+        dataset = base.get_dataset_from_key(dataset_key)
+
         X, Y = dataset.get_processed_files()
         X = convert_pandas_to_npy(X)
         if Y.dtype == np.float64:
@@ -252,14 +255,21 @@ def main(params, **kwargs):
     if data_has_missing_values(X_train) or data_has_missing_values(X_test):
         raise NotImplementedError()
 
-    train_mask, valid_mask = get_fold(X_train, Y_train, fold, folds)
-    data = dict()
-    data["train_X"] = X_train[train_mask]
-    data["train_Y"] = Y_train[train_mask]
-    data["valid_X"] = X_train[valid_mask]
-    data["valid_Y"] = Y_train[valid_mask]
-    data["test_X"] = X_test
-    data["test_Y"] = Y_test
+    if folds > 1:
+        train_mask, valid_mask = get_fold(X_train, Y_train, fold, folds)
+        data = dict()
+        data["train_X"] = X_train[train_mask]
+        data["train_Y"] = Y_train[train_mask]
+        data["valid_X"] = X_train[valid_mask]
+        data["valid_Y"] = Y_train[valid_mask]
+        data["test_X"] = X_test
+        data["test_Y"] = Y_test
+    else:
+        data = dict()
+        data["train_X"] = X_train
+        data["train_Y"] = Y_train
+        data["valid_X"] = X_test
+        data["valid_Y"] = Y_test
 
     result = fit(params, data)
     return 1 - result

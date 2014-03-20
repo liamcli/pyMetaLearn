@@ -18,14 +18,17 @@ class Dataset(object):
         self._meta_features = None
 
         if safe:
-            self._output_directory = os.path.join(base_dir, "did" + str(id) +
+            self._local_directory = os.path.join(base_dir, "did" + str(id) +
                                                             "_" + self._name)
-            if not os.path.exists(self._output_directory):
-                os.makedirs(self._output_directory)
+            if not os.path.exists(self._local_directory):
+                os.makedirs(self._local_directory)
 
-            filename = os.path.join(self._output_directory, "did" + str(id) + "_"
+            filename = os.path.join(self._local_directory, "did" + str(id) + "_"
                                                             +  name + ".pkl")
             if not os.path.exists(filename):
                 fh = open((filename), "w")
                 cPickle.dump(self, fh)
                 fh.close()
+
+        else:
+            self._local_directory = "./"

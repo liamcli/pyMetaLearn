@@ -10,7 +10,24 @@ import urllib2
 from lxml import etree
 import xmltodict
 
-from openml_dataset import OpenMLDataset
+import pyMetaLearn.openml.openml_dataset
+
+
+OPENML_DATA_DIR = os.path.abspath(
+    os.path.expanduser(
+    os.getenv("OPENML_DATA_DIR", os.path.join("~", "OPENML_DATA_DIR"))))
+
+
+def get_local_directory():
+    if not os.path.isdir(OPENML_DATA_DIR):
+        os.makedirs(OPENML_DATA_DIR)
+    return OPENML_DATA_DIR
+
+
+def set_local_directory(newpath):
+    global OPENML_DATA_DIR
+    OPENML_DATA_DIR = newpath
+    return get_local_directory()
 
 
 def get_local_datasets(directory):
@@ -124,10 +141,10 @@ def _parse_dataset_description(dataset_xml, local_directory):
                                "schemas", "dataset.xsd")
     dataset_xsd = _read_file(schema_path)
     dic = _xml_to_dict(dataset_xml, dataset_xsd)["oml:data_set_description"]
-    dataset_object = OpenMLDataset("OpenML", dic["oml:id"],
-         dic["oml:name"], dic["oml:version"], dic["oml:description"],
-         dic["oml:format"], dic["oml:url"], dic["oml:md5_checksum"],
-         local_directory)
+    dataset_object = pyMetaLearn.openml.openml_dataset.OpenMLDataset(
+        "OpenML", dic["oml:id"], dic["oml:name"], dic["oml:version"],
+        dic["oml:description"], dic["oml:format"], dic["oml:url"],
+        dic["oml:md5_checksum"], local_directory)
 
     return dataset_object
 
@@ -195,7 +212,7 @@ def show_only_remote(local_directory):
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument("local_directory")
+    parser.add_argument("--local_directory", default=None)
     tasks = parser.add_mutually_exclusive_group(required=True)
     # Show local datasets
     # TODO: Add argument to show only complete datasets
@@ -217,19 +234,29 @@ def parse_arguments():
     tasks.add_argument("--download-all", help="Download all datasets",
                        action="store_true")
     args = parser.parse_args()
+
+    if args.local_directory is None:
+        raise ValueError("Please specify a local working directory, either "
+                         "via the environment variable OPENML_DATA_DIR or the "
+                         "argument --local-directory.")
+
     return args
 
 
 def main():
     args = parse_arguments()
+
+    if args.local_directory:
+        set_local_directory(args.local_directory)
+
     if args.list:
-        list_local_datasets(args.local_directory)
+        list_local_datasets(get_local_directory())
     elif args.remote:
         show_remote_datasets()
     elif args.only_remote:
-        show_only_remote(args.local_directory)
+        show_only_remote(get_local_directory())
     elif args.download:
-        download(args.local_directory, args.download)
+        download(get_local_directory(), args.download)
     elif args.download-all:
         raise NotImplementedError()
     else:

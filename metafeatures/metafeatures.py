@@ -38,19 +38,19 @@ metafeatures = MetafeatureFunctions()
 ### Simple features
 @metafeatures.define("number_of_instances")
 def number_of_instances(X, Y):
-    return X.shape[0]
+    return float(X.shape[0])
 
 @metafeatures.define("number_of_classes")
 def number_of_classes(X, Y):
-    return len(np.unique(Y))
+    return float(len(np.unique(Y)))
 
 @metafeatures.define("number_of_features")
 def number_of_features(X, Y):
-    return X.shape[1]
+    return float(X.shape[1])
 
 @metafeatures.define("number_of_Instances_with_missing_values")
 def number_of_Instances_with_missing_values(X, Y):
-    num_instances_with_missing_values = 0
+    num_instances_with_missing_values = 0.
     for row in X.iterrows():
         if sum(row[1].isnull()) > 0:
             num_instances_with_missing_values += 1
@@ -63,7 +63,7 @@ def percentage_of_Instances_with_missing_values(X, Y):
 
 @metafeatures.define("number_of_features_with_missing_values")
 def number_of_features_with_missing_values(X, Y):
-    num_features_with_missing_values = 0
+    num_features_with_missing_values = 0.
     for column in X.iteritems():
         if sum(column[1].isnull()) > 0:
             num_features_with_missing_values += 1
@@ -76,7 +76,7 @@ def percentage_of_features_with_missing_values(X, Y):
 
 @metafeatures.define("number_of_missing_values")
 def number_of_missing_values(X, Y):
-    num_missing_values = 0
+    num_missing_values = 0.
     for column in X.iteritems():
         num_missing_values += sum(column[1].isnull())
     return num_missing_values
@@ -88,7 +88,7 @@ def percentage_of_missing_values(X, Y):
 
 @metafeatures.define("number_of_numeric_features")
 def number_of_numeric_features(X, Y):
-    num_numeric = 0
+    num_numeric = 0.
     for column in X.iteritems():
         if column[1].dtype == np.float64:
             num_numeric += 1
@@ -96,7 +96,7 @@ def number_of_numeric_features(X, Y):
 
 @metafeatures.define("number_of_categorical_features")
 def number_of_categorical_features(X, Y):
-    num_categorical = 0
+    num_categorical = 0.
     for column in X.iteritems():
         if column[1].dtype == 'object':
             num_categorical += 1
@@ -107,15 +107,15 @@ def ratio_numerical_to_nominal(X, Y):
     num_categorical = float(metafeatures["number_of_categorical_features"](X, Y))
     num_numerical = float(metafeatures["number_of_numeric_features"](X, Y))
     if num_categorical == 0.0:
-        return 0
+        return 0.
     return num_numerical / num_categorical
 
-@metafeatures.define("ratio_numerical_to_categorical")
+@metafeatures.define("ratio_categorical_to_numerical")
 def ratio_nominal_to_numerical(X, Y):
     num_categorical = float(metafeatures["number_of_categorical_features"](X, Y))
     num_numerical = float(metafeatures["number_of_numeric_features"](X, Y))
     if num_numerical == 0.0:
-        return 0
+        return 0.
     else:
         return num_categorical / num_numerical
 
@@ -155,7 +155,7 @@ def nominal_sum(X, Y):
 
 @metafeatures.define("class_probability_min")
 def class_probability_min(X, Y):
-    occurence_dict = defaultdict(int)
+    occurence_dict = defaultdict(float)
     for value in Y.values:
         occurence_dict[value] += 1
     min_value = np.iinfo(np.int64).max
@@ -167,7 +167,7 @@ def class_probability_min(X, Y):
 # aka default accuracy
 @metafeatures.define("class_probability_max")
 def class_probability_max(X, Y):
-    occurence_dict = defaultdict(int)
+    occurence_dict = defaultdict(float)
     for value in Y.values:
         occurence_dict[value] += 1
     max_value = -1
@@ -178,7 +178,7 @@ def class_probability_max(X, Y):
 
 @metafeatures.define("class_probability_mean")
 def class_probability_mean(X, Y):
-    occurence_dict = defaultdict(int)
+    occurence_dict = defaultdict(float)
     for value in Y.values:
         occurence_dict[value] += 1
     occurences = np.array([occurrence for occurrence in occurence_dict.itervalues()],
@@ -187,7 +187,7 @@ def class_probability_mean(X, Y):
 
 @metafeatures.define("class_probability_std")
 def class_probability_std(X, Y):
-    occurence_dict = defaultdict(int)
+    occurence_dict = defaultdict(float)
     for value in Y.values:
         occurence_dict[value] += 1
     occurences = np.array([occurrence for occurrence in occurence_dict.itervalues()],

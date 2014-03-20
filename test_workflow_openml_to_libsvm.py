@@ -1,11 +1,10 @@
 import os
 import unittest
-import subprocess
 import shutil
+import subprocess
 
 import openml.manage_openml_data as manage_openml_data
 import create_hpolib_dirs
-import target_algorithm.libsvm as libsvm
 
 
 class TestWorkflow(unittest.TestCase):
@@ -14,12 +13,12 @@ class TestWorkflow(unittest.TestCase):
         os.mkdir(self.tmp_dir)
 
     def tearDown(self):
-        #shutil.rmtree(self.tmp_dir)
+        shutil.rmtree(self.tmp_dir)
         pass
 
     def test_workflow(self):
         """Test the workflow of downloading a dataset from OpenML to running
-        a gridsearch experiment with the LibSVM through HPOlib on that dataset:
+        a SMAC experiment with the LibSVM through HPOlib on that dataset:
         1. Create a directory to perform experiments in (setUp method)
         2. Download a dataset from the openml server
         3. Retrieve the processed dataset and calculate meta-features
@@ -64,7 +63,7 @@ class TestWorkflow(unittest.TestCase):
 
         # TODO: Calculate only those which are not already calculated
         mfs = dataset.get_metafeatures()
-        self.assertEqual(len(mfs), 18)
+        self.assertEqual(len(mfs), 19)
 
         experiments_dir = os.path.join(self.tmp_dir, "experiments")
         os.mkdir(experiments_dir)
@@ -72,21 +71,22 @@ class TestWorkflow(unittest.TestCase):
         ########################################################################
         # Create the template of an experiment directory...
         # TODO: do I really need a template directory?
-        # TODO: Isn't it sufficient to have everything in one directory and
-        # have different directory names for different folds?
         # TODO: is there a better way to generate these?
         experiment_dir = os.path.join(experiments_dir, "anneal_experiment")
         os.mkdir(experiment_dir)
-        shutil.copyfile(libsvm.__file__, os.path.join(experiment_dir, "libsvm.py"))
+        # shutil.copyfile(libsvm.__file__, os.path.join(experiment_dir, # "libsvm.py"))
         # TODO: this should be retrieved by a function
-        shutil.copyfile(os.path.join(dataset._output_directory, "did1_anneal.pkl"),
-                os.path.join(experiment_dir, "did1_anneal.pkl"))
+        # shutil.copyfile(os.path.join(dataset._output_directory, "did1_anneal
+        # .pkl"), os.path.join(experiment_dir, "did1_anneal.pkl"))
         with open(os.path.join(experiment_dir, "config.cfg"), "w") as fh:
-            content = create_hpolib_dirs.configure_config_template("libsvm.py")
+            content = create_hpolib_dirs.configure_config_template(
+                "python -m pyMetaLearn.target_algorithm.libsvm",
+                number_of_jobs=10)
             content += "\n[EXPERIMENT]"
             content += "\ntest_fold = 0"
             content += "\ntest_folds = 3"
-            content += "\ndataset = ../did1_anneal.pkl"
+            content += "\ndataset = OPENML:did1_anneal"
+            content += "\ndataset_name = anneal"
             content += "\n"
             fh.write(content)
         with open(os.path.join(experiment_dir, "__init__.py"), "w") as fh:
@@ -128,14 +128,15 @@ class TestWorkflow(unittest.TestCase):
         # Run the actual processes
         processes = []
         for fold_idx in range(3):
-            # TODO: run the HPOlib three times in the newly created dir
             # TODO:Better install it prior to using it to test whether this
             # works and to know where it resides
-            cmd = "export PATH=$PATH:~/HPOlib/Software/runsolver_32\n"
+            cmd = "source ~/thesis/virtualenvs/pycharm/bin/activate\n"
+            cmd += "export OPENML_DATA_DIR=~/thesis/datasets/openML/used/\n"
+            cmd += "export PATH=$PATH:~/HPOlib/Software/runsolver_32\n"
             cmd += "export PATH=$PATH:~/HPOlib/Software/HPOlib/scripts\n"
             cmd += "export PYTHONPATH=$PYTHONPATH:~/HPOlib/Software/HPOlib\n"
             cmd += "export " \
-                   "PYTHONPATH=$PYTHONPATH:~/thesis/Software/metalearn_data\n"
+                   "PYTHONPATH=$PYTHONPATH:~/thesis/Software/pyMetaLearn\n"
             cmd += "HPOlib-run -o /home/feurerm/HPOlib/working_directory/hpolib/optimizers" \
                    "/smac -s 1000 --cwd %s --EXPERIMENT:test_fold %d"\
                   % (experiment_dir, fold_idx)
@@ -147,6 +148,7 @@ class TestWorkflow(unittest.TestCase):
             out, err = processes[-1].communicate()
             print out
             print err
+            self.assertEqual(processes[-1].returncode, 0)
 
 
 if __name__ == "__main__":
