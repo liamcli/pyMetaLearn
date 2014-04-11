@@ -33,9 +33,9 @@ def main(params, **kwargs):
 
     params_hack = dict()
     for key in params:
-        if folds:
-            params_hack["-" + key] = params[key]
+        params_hack["-" + key] = params[key]
     params = str(OrderedDict(sorted(params_hack.items(), key=lambda t: t[0])))
+    print ground_truth
     y = ground_truth[params]
 
     print 'Result: ', y
@@ -46,5 +46,6 @@ if __name__ == "__main__":
     args, params = benchmark_util.parse_cli()
     result = main(params, **args)
     duration = time.time() - starttime
+    # TODO return the time which was measured in the original pickle file!
     print "Result for ParamILS: %s, %f, 1, %f, %d, %s" % \
         ("SAT", abs(duration), result, -1, str(__file__))
