@@ -36,7 +36,7 @@ class TestWorkflow(unittest.TestCase):
 
         # TODO: Y is always the last attribute, but in OpenML there is a flag
         #  for that...
-        X, Y = dataset.get_processed_files()
+        X, Y = dataset.get_pandas()
 
         # TODO: these do not yet add the class (Y) at the end...
         with open(os.path.join(self.tmp_dir, "anneal.html"), "w") as fh:
@@ -70,14 +70,9 @@ class TestWorkflow(unittest.TestCase):
 
         ########################################################################
         # Create the template of an experiment directory...
-        # TODO: do I really need a template directory?
         # TODO: is there a better way to generate these?
         experiment_dir = os.path.join(experiments_dir, "anneal_experiment")
         os.mkdir(experiment_dir)
-        # shutil.copyfile(libsvm.__file__, os.path.join(experiment_dir, # "libsvm.py"))
-        # TODO: this should be retrieved by a function
-        # shutil.copyfile(os.path.join(dataset._output_directory, "did1_anneal
-        # .pkl"), os.path.join(experiment_dir, "did1_anneal.pkl"))
         with open(os.path.join(experiment_dir, "config.cfg"), "w") as fh:
             content = create_hpolib_dirs.configure_config_template(
                 "python -m pyMetaLearn.target_algorithm.libsvm",
@@ -99,7 +94,6 @@ class TestWorkflow(unittest.TestCase):
             directories[optimizer] = os.path.join(experiment_dir, optimizer)
             os.mkdir(directories[optimizer])
 
-        # TODO: create other files as well, e.g. for SMAC
         with open(os.path.join(directories["gridsearch"], "params.pcs"),
                   "w") as fh:
             fh.write("C {-5, -3, -1, 1, 3, 5, 7, 9, 11, 13, 15}\n"
