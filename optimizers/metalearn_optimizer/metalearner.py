@@ -30,7 +30,7 @@ def parse_parameters(args=None):
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("-a", "--algorithm")
     group.add_argument("--cli_target")
-    parser.add_argument("-p", "--params", required=True)
+    # parser.add_argument("-p", "--params", required=True)
     parser.add_argument("--cwd")
     parser.add_argument("--number_of_jobs", required=True, type=int)
     args = parser.parse_args(args=args)
@@ -44,7 +44,7 @@ def setup(args):
     context["dataset_name"] = config.get("EXPERIMENT", "dataset_name")
     base = DatasetBase()
 
-    dataset_keys_file = config.get("METALEARNING", "auxiliary_datasets")
+    dataset_keys_file = config.get("METALEARNING", "datasets")
     with open(dataset_keys_file) as fh:
         dataset_keys = read_dataset_list(fh)
 
@@ -54,7 +54,7 @@ def setup(args):
 
     experiments_list_file = config.get("METALEARNING", "experiments")
     with open(experiments_list_file) as fh:
-        experiments_list = get_experiments_list(fh)
+        experiments_list = read_experiments_list(fh)
 
     experiments = []
     for dataset_experiments in experiments_list:
@@ -81,7 +81,7 @@ def read_dataset_list(fh):
     return dataset_filenames
 
 
-def get_experiments_list(fh):
+def read_experiments_list(fh):
     experiments_list = list()
     for line in fh.readlines():
         experiments_list.append(line.split())
@@ -175,45 +175,68 @@ def split_metafeature_array(dataset_name, metafeatures):
     return dataset_metafeatures, metafeatures
 
 
-def select_params(best_hyperparameters, distances, history):
-    # Iterate over all datasets which are sorted ascending by distance
+def assemble_best_hyperparameters_list(best_hyperparameters, distances):
+    """Create an array with the best hyperparameters according to
+    metalearning, sorted in ascending order, the nearest dataset first.
+    Duplicates are removed"""
+    hyperparameters = []
+    hyperparameters_set = set()
     for dist, name in distances:
         params_for_name = best_hyperparameters[name]
+        if str(params_for_name) not in hyperparameters_set:
+            hyperparameters.append(params_for_name)
+            hyperparameters_set.add(str(params_for_name))
+
+    return hyperparameters
+
+
+def select_params(best_hyperparameters, distances, history):
+    # Iterate over all datasets which are sorted ascending by distance
+    hyperparameters = assemble_best_hyperparameters_list(
+        best_hyperparameters, distances)
+    for params in hyperparameters:
         already_evaluated = False
         # Check if that dataset was already evaluated
         for experiment in history:
             # If so, return to the outer loop
-            if params_for_name == experiment.params:
+            if params == experiment.params:
                 already_evaluated = True
                 break
         if not already_evaluated:
-            logger.info("Next most similar dataset is %s" % name)
-            return params_for_name
+            return params
     raise StopIteration("No more values available.")
 
 
-def metalearn_suggest(history, param_space, context):
-    print "HISTORY", history
-    print "Context", context
+def metalearn_base(context):
     meta_base = context["meta_base"]
     metafeatures = meta_base.get_all_metadata_as_pandas()
-
     # Calculate the distance between the dataset and the other datasets
     assert metafeatures.values.dtype == np.float64
-
     # For l1 and l2 norm the metafeatures must be scaled between 0 and 1
-    if "l1" in context["distance_measure"] or "l2" in context["distance_measure"]:
+    if "l1" in context["distance_measure"] or "l2" in context[
+        "distance_measure"]:
         metafeatures = rescale(metafeatures)
-
     dataset_metafeatures, metafeatures = split_metafeature_array(
-       context["dataset_name"], metafeatures)
+        context["dataset_name"], metafeatures)
     distance_fn = getattr(sys.modules[__name__], context["distance_measure"])
-    distances = calculate_distances(dataset_metafeatures, metafeatures, distance_fn)
-
+    distances = calculate_distances(dataset_metafeatures, metafeatures,
+                                    distance_fn)
     best_hyperparameters = dict()
     for dataset in meta_base.get_datasets():
         experiments = meta_base.get_experiment(dataset)
         best_hyperparameters[dataset] = find_best_hyperparams(experiments)
+    return best_hyperparameters, distances
+
+
+def metalearn_suggest_all(param_space, context):
+    best_hyperparameters, distances = metalearn_base(context)
+    hp_list = assemble_best_hyperparameters_list(best_hyperparameters,
+                                                distances)
+    return hp_list
+
+
+def metalearn_suggest(history, param_space, context):
+    best_hyperparameters, distances = metalearn_base(context)
 
     params_for_name = select_params(best_hyperparameters, distances, history)
     return params_for_name
@@ -250,6 +273,7 @@ def perform_optimization(target_algorithm, suggest_function, param_space,
                                                str(fixed_params)))
         result = target_algorithm(fixed_params)
         evaluations.append(Experiment(params, result))
+        num_evaluations += 1
 
     return min([evaluation[1] for evaluation in evaluations])
 
@@ -259,11 +283,12 @@ def main(args=None):
     if args.cwd:
         os.chdir(args.cwd)
 
-    fh = open(args.params)
-    param_string = fh.read()
-    fh.close()
-    hyperparameters = optimizer_base.parse_hyperparameter_string(param_string)
-    grid = optimizer_base.build_grid(hyperparameters)
+    # fh = open(args.params)
+    # param_string = fh.read()
+    # fh.close()
+    # hyperparameters = optimizer_base.parse_hyperparameter_string(
+    # param_string)
+    # grid = optimizer_base.build_grid(hyperparameters)
     context = setup(args)
 
     if args.algorithm:
@@ -272,9 +297,10 @@ def main(args=None):
         cli_function = optimizer_base.command_line_function
         fn = functools.partial(cli_function, args.cli_target)
 
-    perform_optimization(fn, metalearn_suggest, grid, context, sys.maxint,
+    perform_optimization(fn, metalearn_suggest, None, context, sys.maxint,
                          args.number_of_jobs)
 
 
 if __name__ == "__main__":
     main()
+    exit(0)

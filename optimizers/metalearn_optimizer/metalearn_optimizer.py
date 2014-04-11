@@ -33,7 +33,7 @@ def build_metalearn_call(config, options, optimizer_dir):
         metalearner_file = metalearner_file[:-1]
 
     call = 'python ' + metalearner_file
-    call += ' --params ' + config.get('METALEARNING', 'params')
+    # call += ' --params ' + config.get('METALEARNING', 'params')
     call += " --cli_target " + "'python " + cv_file + "'"
     call += " --cwd " + optimizer_dir
     call += " --number_of_jobs " + config.get("HPOLIB", "number_of_jobs")
@@ -64,7 +64,7 @@ def main(config, options, experiment_dir, **kwargs):
     if options.restore:
         raise NotImplementedError()
     else:
-        optimizer_dir = os.path.join(experiment_dir, "metalearner_" +
+        optimizer_dir = os.path.join(experiment_dir, "metalearn_optimizer_" +
                                      str(options.seed) + "_" +
                                      time_string)
 

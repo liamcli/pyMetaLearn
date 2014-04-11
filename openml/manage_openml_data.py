@@ -7,15 +7,18 @@ import os
 import re
 import urllib2
 
-from lxml import etree
-import xmltodict
+try:
+    from lxml import etree
+    import xmltodict
+except:
+    pass
 
 import pyMetaLearn.openml.openml_dataset
 
 
 OPENML_DATA_DIR = os.path.abspath(
     os.path.expanduser(
-    os.getenv("OPENML_DATA_DIR", os.path.join("~", "OPENML_DATA_DIR"))))
+    os.getenv("OPENML_DATA_DIR", os.path.join("~", ".OPENML_DATA_DIR"))))
 
 
 def get_local_directory():
@@ -30,8 +33,9 @@ def set_local_directory(newpath):
     return get_local_directory()
 
 
-def get_local_datasets(directory):
+def get_local_datasets():
     """Searches for all OpenML datasets in a given directory."""
+    directory = get_local_directory()
     directory_content = os.listdir(directory)
     directory_content.sort()
 
@@ -56,6 +60,14 @@ def get_local_datasets(directory):
     for did in sorted(dataset_info):
         datasets[did] = dataset_info[did]
     return datasets
+
+
+def get_local_dataset(name):
+    dir = get_local_directory()
+    dataset_file = os.path.join(dir, name, name + '.pkl')
+    with open(dataset_file) as fh:
+        dataset = cPickle.load(fh)
+    return dataset
 
 
 def get_remote_datasets(names=False):
@@ -100,15 +112,14 @@ def parse_dataset_id_name_json(json_string):
     return dataset_ids
 
 
-def download(local_directory, dids):
+def download(dids):
     """Downloads datasets.
 
     arguments:
-    - local_directory: local working directory where the dataset will be
-        downloaded to
     - dids: a single integer or a list of integers representing dataset ids.
     returns:
     - a list of dataset objects."""
+    local_directory = get_local_directory()
     datasets = []
     if isinstance(dids, int):
         dids = [dids]
@@ -136,7 +147,9 @@ def download(local_directory, dids):
     return datasets
 
 
-def _parse_dataset_description(dataset_xml, local_directory):
+def _parse_dataset_description(dataset_xml):
+    local_directory = get_local_directory()
+
     schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                "schemas", "dataset.xsd")
     dataset_xsd = _read_file(schema_path)
@@ -177,8 +190,9 @@ def _validate_xml_against_schema(xml_string, schema_string):
     etree.fromstring(xml_string, xmlparser)
 
 
-def list_local_datasets(directory):
+def list_local_datasets():
     """Print the local datasets from the method get_local_datasets."""
+    directory = get_local_directory()
     dataset_info = get_local_datasets(directory)
 
     print " ID   - Name" + " " * 26
@@ -193,9 +207,10 @@ def show_remote_datasets():
         print did[0], did[1]
 
 
-def show_only_remote(local_directory):
+def show_only_remote():
     # TODO: this can be drastically sped-up by using an intersection-like
     # algorithm
+    local_directory = get_local_directory()
     remote_datasets_list = get_remote_datasets(names=True)
     remote_datasets = OrderedDict()
     for dataset in remote_datasets_list:

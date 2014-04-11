@@ -23,7 +23,7 @@ class MetaLearnerTest(unittest.TestCase):
             "/did1_annealfold2/gridsearch_1_2014-2-24--20-3-26-901017"
             "/gridsearch.pkl\n")
         experiments_list.seek(0)
-        retval = metalearner.get_experiments_list(experiments_list)
+        retval = metalearner.read_experiments_list(experiments_list)
         self.assertEqual(len(retval), 3)
         self.assertEqual(len(retval[0]), 2)
         self.assertEqual(len(retval[1]), 0)
