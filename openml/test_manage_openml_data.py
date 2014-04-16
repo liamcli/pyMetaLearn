@@ -53,6 +53,9 @@ class TestManageOpenMLData(unittest.TestCase):
         self.assertListEqual(dataset_ids, [(187, u'random'), (1014, u'aye'),
             (2023, u'dataset'), (2201, u'some'), (2236, u'downloaded')])
 
+    def test_download_task(self):
+        print manage_openml_data.download_task(1)
+
     @unittest.SkipTest
     def test_validate_lxml(self):
          xmlparser = etree.XMLParser(schema=self.schema)

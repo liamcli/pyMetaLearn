@@ -17,7 +17,9 @@ class Dataset(object):
         self._md5_cheksum = md5_checksum
         self._meta_features = None
 
+        # TODO: does anyone need this anymore?
         if safe:
+            print base_dir
             self._local_directory = os.path.join(base_dir, "did" + str(id) +
                                                             "_" + self._name)
             if not os.path.exists(self._local_directory):

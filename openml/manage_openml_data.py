@@ -5,6 +5,8 @@ import json
 import cPickle
 import os
 import re
+import StringIO
+import tempfile
 import urllib2
 
 try:
@@ -14,6 +16,7 @@ except:
     pass
 
 import pyMetaLearn.openml.openml_dataset
+import pyMetaLearn.openml.openml_task
 
 
 OPENML_DATA_DIR = os.path.abspath(
@@ -24,6 +27,12 @@ OPENML_DATA_DIR = os.path.abspath(
 def get_local_directory():
     if not os.path.isdir(OPENML_DATA_DIR):
         os.makedirs(OPENML_DATA_DIR)
+    if not os.path.isdir(os.path.join(OPENML_DATA_DIR, "tasks")):
+        os.mkdir(os.path.join(OPENML_DATA_DIR, "tasks"))
+    if not os.path.isdir(os.path.join(OPENML_DATA_DIR, "metafeatures")):
+        os.mkdir(os.path.join(OPENML_DATA_DIR, "metafeatures"))
+    if not os.path.isdir(os.path.join(OPENML_DATA_DIR, "datasets")):
+        os.mkdir(os.path.join(OPENML_DATA_DIR, "datasets"))
     return OPENML_DATA_DIR
 
 
@@ -36,25 +45,21 @@ def set_local_directory(newpath):
 def get_local_datasets():
     """Searches for all OpenML datasets in a given directory."""
     directory = get_local_directory()
-    directory_content = os.listdir(directory)
+    dataset_directory = os.path.join(directory, "datasets")
+    directory_content = os.listdir(dataset_directory)
     directory_content.sort()
 
     # Find all dataset ids for which we have downloaded the dataset description
     dataset_info = dict()
     for filename in directory_content:
-        filepath = os.path.join(directory, filename)
+        filepath = os.path.join(dataset_directory, filename)
 
-        match = re.match(r"(did)([0-9]*)(_)", filename)
+        match = re.match(r"(did)([0-9]*)\.xml", filename)
         if match:
             did = match.group(2)
             did = int(did)
 
-            fh = open(os.path.join(filepath, filepath + ".pkl"))
-            dataset = cPickle.load(fh)
-            fh.close()
-
-            dataset_info[did] = dataset._name
-            continue
+            dataset_info[did] = filepath
 
     datasets = OrderedDict()
     for did in sorted(dataset_info):
@@ -62,11 +67,14 @@ def get_local_datasets():
     return datasets
 
 
-def get_local_dataset(name):
-    dir = get_local_directory()
-    dataset_file = os.path.join(dir, name, name + '.pkl')
+def get_local_dataset(did):
+    local_directory = get_local_directory()
+
+    dataset_dir = os.path.join(local_directory, "datasets")
+    dataset_file = os.path.join(dataset_dir, "did%d.xml" % did)
     with open(dataset_file) as fh:
-        dataset = cPickle.load(fh)
+        dataset = pyMetaLearn.openml.openml_dataset.OpenMLDataset\
+            .from_xml_file(dataset_file)
     return dataset
 
 
@@ -75,7 +83,7 @@ def get_remote_datasets(names=False):
     the response from  http://www.openml.org/api_query/free_query?q=SELECT+%60dataset%60.%60did%60+FROM+%60dataset%60
     """
 
-    url = "http://www.openml.org/api_query/free_query?q=" \
+    url = "http://openml.liacs.nl/api_query/free_query?q=" \
           "SELECT+%60dataset%60.%60did%60,%60dataset%60." \
           "%60name%60+FROM+%60dataset%60"
     json_string = _read_url(url)
@@ -84,6 +92,48 @@ def get_remote_datasets(names=False):
         return parse_dataset_id_name_json(json_string)
     else:
         return parse_dataset_id_json(json_string)
+
+
+def get_remote_tasks():
+    url = "http://openml.liacs.nl/api_query/free_query?q=SELECT+%60task%60" \
+          ".%60task_id%60+FROM+%60task%60,%60task_type%60+" \
+          "WHERE+%60task%60.%60ttid%60=%60task_type%60.%60ttid%60+" \
+          "AND+%60task_type%60.%60name%60=%22Supervised%20Classification%22"
+    json_string = _read_url(url)
+    json_data = json.loads(json_string)
+
+    assert "SQL was processed:" in json_data["status"]
+    assert "Error" not in json_data["status"]
+
+    task_ids = []
+    for task in json_data["data"]:
+        tid = ast.literal_eval(task[0])
+        assert type(tid) is int
+        task_ids.append(tid)
+    return task_ids
+
+def download_task(tid, cached=True):
+    local_directory = get_local_directory()
+    task_dir = os.path.join(local_directory, "tasks")
+    xml_file = os.path.join(task_dir, "tid%d.xml" % tid)
+
+    if not cached or not os.path.exists(xml_file):
+        query_url = "http://openml.liacs.nl/api/?f=openml.task.search&task_id=%d"\
+                    % tid
+        try:
+            task_xml = _read_url(query_url)
+        except urllib2.URLError as e:
+            print e, query_url
+            raise e
+
+        xml_file = xml_file
+        with open(xml_file, "w") as fh:
+            fh.write(task_xml)
+
+    task = pyMetaLearn.openml.openml_task.OpenMLTask.from_xml_file(xml_file)
+
+    print task
+    return task
 
 
 def parse_dataset_id_json(json_string):
@@ -112,7 +162,7 @@ def parse_dataset_id_name_json(json_string):
     return dataset_ids
 
 
-def download(dids):
+def download(dids, cached=True):
     """Downloads datasets.
 
     arguments:
@@ -120,51 +170,63 @@ def download(dids):
     returns:
     - a list of dataset objects."""
     local_directory = get_local_directory()
+    dataset_dir = os.path.join(local_directory, "datasets")
     datasets = []
     if isinstance(dids, int):
         dids = [dids]
 
     for did in dids:
-        if type(did) is not int:
-            raise ValueError("%s is not of type integer. Are you sure that the "
-                             "argument dids %s is a list of integers?" % (did, dids))
+        dataset_file = os.path.join(dataset_dir, "did%d.xml" % did)
 
-        print "Fetching dataset id", did,
-        query_url = "http://www.openml.org/api/?f=openml.data" \
-                ".description&data_id=%d" % did
+        if not cached or not os.path.exists(dataset_file):
+            if type(did) is not int:
+                raise ValueError("%s is not of type integer. Are you sure that the "
+                                 "argument dids %s is a list of integers?" % (did, dids))
 
-        try:
-            dataset_xml = _read_url(query_url)
-        except urllib2.URLError as e:
-            print e, query_url
-            raise e
+            print "Fetching dataset id", did,
+            query_url = "http://openml.liacs.nl/api/?f=openml.data" \
+                    ".description&data_id=%d" % did
 
-        descr = _parse_dataset_description(dataset_xml, local_directory)
-        # Fetch the dataset from the internet
-        descr.get_unprocessed_files()
-        datasets.append(descr)
-        print descr._name
+            try:
+                dataset_xml = _read_url(query_url)
+            except urllib2.URLError as e:
+                print e, query_url
+                raise e
+
+            with open(dataset_file, "w") as fh:
+                fh.write(dataset_xml)
+
+            dataset = pyMetaLearn.openml.openml_dataset.OpenMLDataset\
+                .from_xml_file(dataset_file)
+            # Fetch the dataset from the internet
+            dataset.get_unprocessed_files()
+
+        dataset = pyMetaLearn.openml.openml_dataset.OpenMLDataset\
+                .from_xml_file(dataset_file)
+        datasets.append(dataset)
+        print dataset._name
     return datasets
 
-
-def _parse_dataset_description(dataset_xml):
-    local_directory = get_local_directory()
-
-    schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               "schemas", "dataset.xsd")
-    dataset_xsd = _read_file(schema_path)
-    dic = _xml_to_dict(dataset_xml, dataset_xsd)["oml:data_set_description"]
-    dataset_object = pyMetaLearn.openml.openml_dataset.OpenMLDataset(
-        "OpenML", dic["oml:id"], dic["oml:name"], dic["oml:version"],
-        dic["oml:description"], dic["oml:format"], dic["oml:url"],
-        dic["oml:md5_checksum"], local_directory)
-
-    return dataset_object
-
 def _read_url(url):
+    CHUNK = 16 * 1024
+    string = StringIO.StringIO()
     connection = urllib2.urlopen(url)
-    response = connection.read()
-    return response
+    tmp = tempfile.NamedTemporaryFile(mode='w', delete=False)
+    with tmp as fh:
+        while True:
+            chunk = connection.read(CHUNK)
+            if not chunk: break
+            fh.write(chunk)
+
+    tmp = open(tmp.name, "r")
+    with tmp as fh:
+        while True:
+            chunk = fh.read(CHUNK)
+            if not chunk: break
+            string.write(chunk)
+
+    return string.getvalue()
+
 
 def _read_file(filename):
     string = ""

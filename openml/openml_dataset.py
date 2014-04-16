@@ -4,7 +4,7 @@ import cPickle
 from collections import OrderedDict
 import os
 import time
-import urllib2
+import types
 
 import arff
 import numpy as np
@@ -18,18 +18,31 @@ from pyMetaLearn.metafeatures.metafeatures import calculate_all_metafeatures
 
 class OpenMLDataset(Dataset):
     def __init__(self, source_community, id, name, version, description,
-                 format, url, md5_checksum, local_directory, safe=True):
+                 format, url, md5_checksum, local_directory,
+                 default_target_attribute, safe=False):
         super(OpenMLDataset, self).__init__(source_community, id, name,
                  version, description, format, url, md5_checksum,
                  local_directory, safe)
+
+    @classmethod
+    def from_xml_file(cls, xml_file):
+        local_dir = pyMetaLearn.openml.manage_openml_data.get_local_directory()
+        dataset_dir = os.path.join(local_dir, "datasets")
+        with open(xml_file, "r") as fh:
+            task_xml = fh.read()
+        dic = pyMetaLearn.openml.manage_openml_data._xml_to_dict(task_xml)["oml:data_set_description"]
+
+        return cls("OpenML", dic["oml:id"], dic["oml:name"], dic["oml:version"],
+            dic["oml:description"], dic["oml:format"], dic["oml:url"],
+            dic["oml:md5_checksum"], dataset_dir, None)
 
     def calculate_metadata(self):
         pass
 
     def get_pandas(self):
-        x_path = os.path.join(self.openMLBasePath(),
+        x_path = os.path.join(self.openMLBasePath(), "datasets",
                               self._local_directory, "x.df")
-        y_path = os.path.join(self.openMLBasePath(),
+        y_path = os.path.join(self.openMLBasePath(), "datasets",
                               self._local_directory, "y.df")
         if not (os.path.exists(x_path) and os.path.exists(y_path)):
             self.get_unprocessed_files()
@@ -43,59 +56,103 @@ class OpenMLDataset(Dataset):
                 y = cPickle.load(y_pickle)
         return x, y
 
-    def get_npy(self):
+    def get_npy(self, target=None):
         arff = self.get_unprocessed_files()
-        x, y = self._convert_arff_structure_to_npy(arff)
+        x, y = self._convert_arff_structure_to_npy(arff, target=target)
         return x, y
 
-    def get_unprocessed_files(self):
+    def get_arff_filename(self):
         output_filename = "did" + str(self._id) + "_" + self._name + ".arff"
-        output_path = os.path.join(self.openMLBasePath(),
-                                   self._local_directory,
-                                   output_filename)
-        if not os.path.exists(output_path):
-            return self._fetch_dataset(output_path)
-        else:
-            fh = open(output_path)
-            arff_object = arff.load(fh)
-            fh.close()
-            return arff_object
+        output_path = os.path.join(self.openMLBasePath(), "datasets",
+                                   self._local_directory, output_filename)
+        return output_path
 
-    def _fetch_dataset(self, output_path):
-        arff_string = self._read_url(self._url)
-        arff_object = arff.loads(arff_string)
-        fh = open(output_path, "w")
-        fh.write(arff_string)
+    def get_unprocessed_files(self):
+        output_path = self.get_arff_filename()
+        if not os.path.exists(output_path):
+            print "Download file"
+            self._fetch_dataset(output_path)
+
+        # A random number after which we consider a file for too large on a
+        # 32 bit system...currently 120mb (just a little bit more than covtype)
+        import struct
+        bits = ( 8 * struct.calcsize("P"))
+        if bits != 64 and os.path.getsize(output_path) > 120000000:
+            return None
+
+        fh = open(output_path)
+        arff_object = arff.load(fh)
         fh.close()
         return arff_object
 
-    def _prepare_dataset(self, arff):
+    def _fetch_dataset(self, output_path):
+        arff_string = self._read_url(self._url)
+
+        fh = open(output_path, "w")
+        fh.write(arff_string)
+        fh.close()
+        del arff_string
+
+    def _prepare_dataset(self, arff, target=None):
         starttime = time.time()
         data_frame = self._convert_arff_structure_to_pandas(arff)
 
         # TODO: the last attribute is not necessarily the class
-        class_ = data_frame.keys()[-1]
-        attributes = data_frame.keys()[0:-1]
-        x = data_frame[attributes]
-        y = data_frame[class_]
 
-        print "downloading dataset took", time.time() - starttime, "seconds."
+        if target is not None:
+            try:
+                x = data_frame.loc[:,data_frame.keys() != target]
+                y = data_frame[target]
+            except KeyError as e:
+                print data_frame.keys(), target
+                import sys
+                sys.stdout.flush()
+                raise e
+        else:
+            class_ = data_frame.keys()[-1]
+            y = data_frame[class_]
+            attributes = data_frame.keys()[0:-1]
+            x = data_frame[attributes]
+
+        # print "downloading dataset took", time.time() - starttime, "seconds."
         return x, y
 
+    def _convert_attribute_type(self, attribute_type):
+        # Input looks like:
+        # {'?','GB','GK','GS','TN','ZA','ZF','ZH','ZM','ZS'}
+        # real
+        # etc...
+
+        if isinstance(attribute_type, types.StringTypes):
+            attribute_type = attribute_type.lower()
+        elif isinstance(attribute_type, list):
+            attribute_type = "nominal"
+        else:
+            raise NotImplementedError()
+
+        # a string indicates something like real, integer while nominal
+        # is represented as an array
+        if attribute_type in ("real", "integer", "numeric"):
+            dtype = np.float64
+        elif attribute_type == "nominal":
+            dtype = 'object'
+        else:
+            print attribute_type
+            import sys
+            sys.stdout.flush()
+            raise NotImplementedError()
+
+        return dtype
+
     def _convert_arff_structure_to_pandas(self, arff):
+        # @attribute 'family' {'?','GB','GK','GS','TN','ZA','ZF','ZH','ZM','ZS'}
         """Has this interface to allow testing
         """
         data_dict = OrderedDict()
         for idx, attribute in enumerate(arff["attributes"]):
             attribute_name = attribute[0].lower()
-            attribute_type = attribute[1].lower() if type(attribute[1]) == \
-                                                     str else "nominal"
-            if attribute_type in set(['string, date']):
-                raise NotImplementedError()
+            dtype = self._convert_attribute_type(attribute[1])
 
-            # a string indicates something like real, integer while nominal
-            # is represented as an array
-            dtype = np.float64 if type(attribute[1]) == str else 'object'
             untransformed_array = [instance[idx] for instance in arff["data"]]
             series = pd.Series(untransformed_array, name=attribute_name,
                                dtype=dtype)
@@ -108,14 +165,14 @@ class OpenMLDataset(Dataset):
         return df
 
     def _convert_arff_structure_to_npy(self, arff, replace_missing_with=0,
-                                       scaling=None):
+                                       scaling=None, target=None):
         """Nominal values are replaced with a one hot encoding and missing
          values represented with zero."""
 
         if replace_missing_with != 0:
-            raise NotImplementedError()
+            raise NotImplementedError(replace_missing_with)
 
-        X, Y = self._prepare_dataset(arff)
+        X, Y = self._prepare_dataset(arff, target)
         num_fields = 0
         attribute_arrays = []
         keys = []
@@ -146,8 +203,14 @@ class OpenMLDataset(Dataset):
 
             else:
                 raise NotImplementedError()
+        try:
+            dataset_array = np.ndarray((X.shape[0], num_fields))
+        except ValueError as e:
+            print arff["relation"], X.shape[0], num_fields
+            import sys
+            sys.stdout.flush()
+            raise e
 
-        dataset_array = np.ndarray((X.shape[0], num_fields))
         col_idx = 0
         for attribute_array in attribute_arrays:
             length = attribute_array.shape[1]
@@ -159,7 +222,8 @@ class OpenMLDataset(Dataset):
             Y = np.array([encoding[value] for value in Y], np.int32)
         elif Y.dtype == np.float64:
             Y = np.array([value for value in Y], dtype=np.float64)
-        Y = Y.reshape((-1, 1))
+        Y = Y.reshape((-1, 1)).ravel()
+
         return dataset_array, Y
 
 
@@ -251,6 +315,7 @@ class OpenMLDataset(Dataset):
 
     def get_metafeatures(self):
         metafeatures_filename = os.path.join(self.openMLBasePath(),
+                                             "metafeatures",
                                              self._local_directory,
                                              "metafeatures.pkl")
         if os.path.exists(metafeatures_filename):
@@ -264,9 +329,7 @@ class OpenMLDataset(Dataset):
         return metafeatures
 
     def _read_url(self, url):
-        connection = urllib2.urlopen(url)
-        response = connection.read()
-        return response
+        return pyMetaLearn.openml.manage_openml_data._read_url(url)
 
     def openMLBasePath(self):
         return pyMetaLearn.openml.manage_openml_data.get_local_directory()
