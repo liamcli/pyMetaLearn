@@ -61,10 +61,45 @@ class OpenMLTask(object):
         X, Y = dataset.get_npy(target=self.target_feature)
         return X, Y
 
+    def get_train_and_test_set(self, X=None, Y=None):
+        if X is None and Y is None:
+            # TODO: at some point get the split from OpenML
+            X, Y = self.get_dataset()
+            rs = np.random.RandomState(42)
+            indices = np.arange(X.shape[0])
+            rs.shuffle(indices)
+            X = X[indices]
+            Y = Y[indices]
+        elif X is None or Y is None:
+            raise NotImplementedError()
+
+        test_folds = self.estimation_procedure["parameters"]["test_folds"]
+        test_fold = self.estimation_procedure["parameters"]["test_fold"]
+        print "Tests folds", test_fold, test_folds
+
+        split = self._get_fold(X, Y, fold=test_fold, folds=test_folds)
+        X_train = X[split[0]]
+        X_test = X[split[1]]
+        Y_train = Y[split[0]]
+        Y_test = Y[split[1]]
+
+        return (X_train, X_test, Y_train, Y_test)
+
     def evaluate(self, algo):
+        """Evaluate an algorithm on the test data.
+        """
         raise NotImplementedError()
 
-    def partial_evaluate(self, algo, fold, folds):
+    def perform_cv_fold(self, algo, fold, folds):
+        """Allows the user to perform cross validation for hyperparameter
+        optimization on the training data."""
+        # TODO: this is only done for hyperparameter optimization and is not
+        # part of the OpenML specification. The OpenML specification would
+        # like to have the hyperparameter evaluation inside the evaluate
+        # performed by the target algorithm itself. Hyperparameter
+        # optimization on the other hand needs these both things to be decoupled
+        # For being closer to OpenML one could also call evaluate and pass
+        # everything else through kwargs.
         if self.task_type != "Supervised Classification":
             raise NotImplementedError()
 
@@ -79,26 +114,11 @@ class OpenMLTask(object):
         if self.evaluation_measure != "predictive_accuracy":
             raise NotImplementedError()
 
-
-        X, Y = self.get_dataset()
-        rs = np.random.RandomState(42)
-        indices = np.arange(X.shape[0])
-        rs.shuffle(indices)
-        X = X[indices]
-        Y = Y[indices]
-
-        ############################################################################
+        ########################################################################
         # Test folds
-        test_folds = self.estimation_procedure["parameters"]["test_folds"]
-        test_fold = self.estimation_procedure["parameters"]["test_fold"]
+        X_train, X_test, Y_train, Y_test = self.get_train_and_test_set()
 
-        split = self._get_fold(X, Y, fold=test_fold, folds=test_folds)
-        X_train = X[split[0]]
-        X_test = X[split[1]]
-        Y_train = Y[split[0]]
-        Y_test = Y[split[1]]
-
-        ############################################################################
+        ########################################################################
         # Crossvalidation folds
         train_mask, valid_mask = self._get_fold(X_train, Y_train, fold, folds)
         data = dict()
@@ -117,7 +137,10 @@ class OpenMLTask(object):
 
 
     def _get_fold(self, X, Y, fold, folds):
-        assert fold < folds
+        fold = int(fold)
+        folds = int(folds)
+        if fold >= folds:
+            raise ValueError((fold, folds))
         # do stratified cross validation, like OpenML does according to the MySQL
         # dump.
         # print fold, "/", folds

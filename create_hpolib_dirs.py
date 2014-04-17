@@ -13,7 +13,7 @@ config_template = \
 function = %s
 number_of_jobs = %d
 result_on_terminate = %f
-number_cv = %d
+number_cv_folds = %d
     """
 def configure_config_template(function, number_of_jobs=200,
                               result_on_terminate=1,

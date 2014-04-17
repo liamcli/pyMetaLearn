@@ -1,16 +1,16 @@
 import cPickle
 import os
 
-import pyMetaLearn.openml.manage_openml_data as openml
-import pyMetaLearn.skdata.skdata_adapter as skdata
+import pyMetaLearn.openml.manage_openml_data
+import pyMetaLearn.skdata.skdata_adapter
 
 class DatasetBase(object):
     def __init__(self):
         self.repositories = dict()
 
         # All repositories are hard-coded so far...
-        self.repositories["OPENML"] = openml
-        self.repositories["SKDATA"] = skdata
+        self.repositories["OPENML"] = pyMetaLearn.openml.manage_openml_data
+        self.repositories["SKDATA"] = pyMetaLearn.skdata.skdata_adapter
 
     def get_repositories(self):
         raise NotImplementedError()
@@ -31,9 +31,9 @@ class DatasetBase(object):
                 dataset = repo.get_local_dataset(name)
                 return dataset
 
-        else:
-            raise NotImplementedError("Currently, only %s are supported" %
-                                      str(self.repositories.keys()))
+            else:
+                raise NotImplementedError("Currently, only %s are supported" %
+                                          str(self.repositories.keys()))
 
         else:
             raise ValueError("A dataset must be described by a key in the "

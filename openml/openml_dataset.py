@@ -20,7 +20,7 @@ class OpenMLDataset(Dataset):
     def __init__(self, source_community, id, name, version, description,
                  format, url, md5_checksum, local_directory,
                  default_target_attribute, safe=False):
-        super(OpenMLDataset, self).__init__(source_community, id, name,
+        super(OpenMLDataset, self).__init__(source_community, int(id), name,
                  version, description, format, url, md5_checksum,
                  local_directory, safe)
 
@@ -39,14 +39,16 @@ class OpenMLDataset(Dataset):
     def calculate_metadata(self):
         pass
 
-    def get_pandas(self):
-        x_path = os.path.join(self.openMLBasePath(), "datasets",
-                              self._local_directory, "x.df")
-        y_path = os.path.join(self.openMLBasePath(), "datasets",
-                              self._local_directory, "y.df")
+    def get_pandas(self, target=None):
+        x_path = os.path.join(self.openMLBasePath(), "datasets", "did%d_x.df"
+                                                                 % self._id)
+        y_path = os.path.join(self.openMLBasePath(), "datasets", "did%d_y.df"
+                                                                 % self._id)
+        import sys
+        sys.stdout.flush()
         if not (os.path.exists(x_path) and os.path.exists(y_path)):
-            self.get_unprocessed_files()
-            x, y = self._prepare_dataset()
+            arff = self.get_unprocessed_files()
+            x, y = self._prepare_dataset(arff, target=target)
             x.to_pickle(x_path)
             y.to_pickle(y_path)
         else:
@@ -63,8 +65,7 @@ class OpenMLDataset(Dataset):
 
     def get_arff_filename(self):
         output_filename = "did" + str(self._id) + "_" + self._name + ".arff"
-        output_path = os.path.join(self.openMLBasePath(), "datasets",
-                                   self._local_directory, output_filename)
+        output_path = os.path.join(self.openMLBasePath(), "datasets", output_filename)
         return output_path
 
     def get_unprocessed_files(self):
@@ -316,7 +317,6 @@ class OpenMLDataset(Dataset):
     def get_metafeatures(self):
         metafeatures_filename = os.path.join(self.openMLBasePath(),
                                              "metafeatures",
-                                             self._local_directory,
                                              "metafeatures.pkl")
         if os.path.exists(metafeatures_filename):
             with open(metafeatures_filename) as fh:

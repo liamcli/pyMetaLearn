@@ -1,10 +1,11 @@
+import cPickle
 import os
 import unittest
 import shutil
 import subprocess
 
-import openml.manage_openml_data as manage_openml_data
-import create_hpolib_dirs
+import pyMetaLearn.openml.manage_openml_data
+import pyMetaLearn.create_hpolib_dirs
 
 
 class TestWorkflow(unittest.TestCase):
@@ -25,18 +26,24 @@ class TestWorkflow(unittest.TestCase):
         4. Create an experiment directory
         5. Run a small gridsearch on the new experiment
         """
+        local_dir = pyMetaLearn.openml.manage_openml_data\
+            .set_local_directory(self.tmp_dir)
+        self.assertEqual(pyMetaLearn.openml.manage_openml_data
+                         .get_local_directory(), self.tmp_dir)
+        self.assertTrue(os.path.exists(os.path.join(self.tmp_dir, "datasets")))
 
-        datasets = manage_openml_data.get_remote_datasets(names=False)
+        datasets = pyMetaLearn.openml.manage_openml_data.get_remote_datasets(
+            names=False)
         # This could either be a single dataset id or a list of dataset ids
-        dataset = manage_openml_data.download(self.tmp_dir, datasets[0])
+        dataset = pyMetaLearn.openml.manage_openml_data.download(datasets[0])
         # Dataset is actually a list of datasets
         self.assertEqual(len(dataset), 1)
         dataset = dataset[0]
         self.assertEqual(dataset._name, "anneal")
 
-        # TODO: Y is always the last attribute, but in OpenML there is a flag
-        #  for that...
-        X, Y = dataset.get_pandas()
+        X, Y = dataset.get_pandas(target="class")
+        self.assertTrue(os.path.exists(os.path.join(self.tmp_dir, "datasets",
+                                                    "did1_anneal.arff")))
 
         # TODO: these do not yet add the class (Y) at the end...
         with open(os.path.join(self.tmp_dir, "anneal.html"), "w") as fh:
@@ -70,18 +77,33 @@ class TestWorkflow(unittest.TestCase):
 
         ########################################################################
         # Create the template of an experiment directory...
+        task_properties = {"task_id": 1,
+                       "task_type": "Supervised Classification",
+                       "data_set_id": 1,
+                       "target_feature": "class",
+                       "estimation_procudure_type": "crossvalidation with crossvalidation holdout",
+                       "data_splits_url": None,
+                       "estimation_parameters": {"stratified_sampling": "true", "test_folds": 3,
+                                                 "test_fold": 0},
+                       "evaluation_measure": "predictive_accuracy"}
+
+        custom_tasks_dir = os.path.join(self.tmp_dir, "custom_tasks")
+        os.mkdir(custom_tasks_dir)
+        with open(os.path.join(custom_tasks_dir, "did_%d.pkl" %
+                task_properties["task_id"]), "w") as fh:
+            cPickle.dump(task_properties, fh)
+
         # TODO: is there a better way to generate these?
         experiment_dir = os.path.join(experiments_dir, "anneal_experiment")
         os.mkdir(experiment_dir)
         with open(os.path.join(experiment_dir, "config.cfg"), "w") as fh:
-            content = create_hpolib_dirs.configure_config_template(
+            content = pyMetaLearn.create_hpolib_dirs.configure_config_template(
                 "python -m pyMetaLearn.target_algorithm.libsvm",
-                number_of_jobs=10)
+                number_of_jobs=5)
             content += "\n[EXPERIMENT]"
-            content += "\ntest_fold = 0"
-            content += "\ntest_folds = 3"
-            content += "\ndataset = OPENML:did1_anneal"
-            content += "\ndataset_name = anneal"
+            content += "\ntask_args_pkl = %s" % os.path.join(pyMetaLearn
+                .openml.manage_openml_data.get_local_directory(),
+                "custom_tasks", "did_1.pkl")
             content += "\n"
             fh.write(content)
         with open(os.path.join(experiment_dir, "__init__.py"), "w") as fh:
@@ -125,15 +147,14 @@ class TestWorkflow(unittest.TestCase):
             # TODO:Better install it prior to using it to test whether this
             # works and to know where it resides
             cmd = "source ~/thesis/virtualenvs/pycharm/bin/activate\n"
-            cmd += "export OPENML_DATA_DIR=~/thesis/datasets/openML/used/\n"
+            cmd += "export OPENML_DATA_DIR=%s\n" % os.path.join(self.tmp_dir)
             cmd += "export PATH=$PATH:~/HPOlib/Software/runsolver_32\n"
             cmd += "export PATH=$PATH:~/HPOlib/Software/HPOlib/scripts\n"
             cmd += "export PYTHONPATH=$PYTHONPATH:~/HPOlib/Software/HPOlib\n"
             cmd += "export " \
                    "PYTHONPATH=$PYTHONPATH:~/thesis/Software/pyMetaLearn\n"
             cmd += "HPOlib-run -o /home/feurerm/HPOlib/working_directory/hpolib/optimizers" \
-                   "/smac -s 1000 --cwd %s --EXPERIMENT:test_fold %d"\
-                  % (experiment_dir, fold_idx)
+                   "/smac -s 1000 --cwd %s" % experiment_dir
             print cmd
             processes.append(subprocess.Popen(cmd, shell=True,
                                               executable="/bin/bash",

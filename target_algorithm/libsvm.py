@@ -1,3 +1,4 @@
+import cPickle
 import numpy as np
 import os
 import sys
@@ -6,15 +7,12 @@ import time
 import sklearn
 import sklearn.datasets
 import sklearn.utils
-import sklearn.cross_validation as cross_validation
 import sklearn.svm
 
 import HPOlib.benchmark_util as benchmark_util
 import HPOlib.wrapping_util as wrapping_util
 
-from pyMetaLearn.dataset_base import DatasetBase
 from pyMetaLearn.openml.openml_task import OpenMLTask
-
 
 # Specify the size of the kernel test_cache (in MB)
 SVM_CACHE_SIZE = 2000
@@ -53,7 +51,11 @@ def data_has_missing_values(X):
     return not np.isfinite(X).all()
 
 
-def task_evaluate(params, fold=0, folds=1):
+def task_evaluate(params):
+    pass
+
+
+def fold_evaluate(params, fold=0, folds=1):
     random_state = sklearn.utils.check_random_state(42)
     C = 2.**(float(params["C"]))
     gamma = 2.**(float(params["gamma"]))
@@ -61,10 +63,11 @@ def task_evaluate(params, fold=0, folds=1):
                            kernel="rbf" , random_state=random_state)
 
     config = wrapping_util.load_experiment_config_file()
-    task_id, task_type, data_set_id, target_feature,
-    estimation_procudure_type, data_splits_url,
-    estimation_parameters, evaluation_measure
-    task = OpenMLTask()
+    task_args_pkl = config.get("EXPERIMENT", "task_args_pkl")
+    with open(task_args_pkl) as fh:
+        task_args = cPickle.load(fh)
+
+    task = OpenMLTask(**task_args)
     X, Y = task.get_dataset()
 
     if data_has_categorical_values(X):
@@ -74,14 +77,14 @@ def task_evaluate(params, fold=0, folds=1):
     if data_has_missing_values(X):
         raise NotImplementedError()
 
-    if isinstance(Y.dtype, float):
+    if Y.dtype in (float, np.float, np.float16, np.float32, np.float64):
         raise ValueError("SVC is used for classification, the target "
                          "values are float values which implies this is a "
                          "regression task.")
-    elif not isinstance(Y.dtype, int):
+    elif Y.dtype != np.int32:
         raise NotImplementedError(Y.dtype)
 
-    accuracy = task.partial_evaluate(algo, fold, folds)
+    accuracy = task.perform_cv_fold(algo, fold, folds)
     return 1 - accuracy
 
 
@@ -89,7 +92,7 @@ if __name__ == "__main__":
     starttime = time.time()
     args, params = benchmark_util.parse_cli()
     print params
-    result = task_evaluate(params, **args)
+    result = fold_evaluate(params, **args)
     duration = time.time() - starttime
     print "Result for ParamILS: %s, %f, 1, %f, %d, %s" % \
         ("SAT", abs(duration), result, -1, str(__file__))

@@ -2,7 +2,6 @@ import argparse
 import ast
 from collections import OrderedDict
 import json
-import cPickle
 import os
 import re
 import StringIO
@@ -176,6 +175,7 @@ def download(dids, cached=True):
         dids = [dids]
 
     for did in dids:
+        did = int(did)
         dataset_file = os.path.join(dataset_dir, "did%d.xml" % did)
 
         if not cached or not os.path.exists(dataset_file):
@@ -195,7 +195,6 @@ def download(dids, cached=True):
 
             with open(dataset_file, "w") as fh:
                 fh.write(dataset_xml)
-
             dataset = pyMetaLearn.openml.openml_dataset.OpenMLDataset\
                 .from_xml_file(dataset_file)
             # Fetch the dataset from the internet

@@ -1,5 +1,7 @@
 from collections import defaultdict
+import cPickle
 import numpy as np
+import os
 
 import pyMetaLearn.openml.manage_openml_data
 from pyMetaLearn.openml.openml_dataset import OpenMLDataset
@@ -49,18 +51,35 @@ print "Datasets which will be used", to_use
 print "This are %d datasets." % len(to_use)
 print
 
+local_directory = pyMetaLearn.openml.manage_openml_data.get_local_directory()
+custom_tasks_dir = os.path.join(local_directory, "custom_tasks")
+try:
+    os.mkdir(custom_tasks_dir)
+except:
+    pass
+
 for did in to_use:
     if len(did_to_targets[did]) != 1:
         raise NotImplementedError()
-    # print did, did_to_targets[did]
 
-    task = OpenMLTask(100000 + did, "Supervised Classification", did,
-                did_to_targets[did].pop().lower(),
-                "crossvalidation with crossvalidation holdout", None,
-                {"stratified_sampling": "true", "test_folds": 3,
-                "test_fold": 0}, "predictive_accuracy")
+    task_properties = {"task_id": did,
+                       "task_type": "Supervised Classification",
+                       "data_set_id": did,
+                       "target_feature": did_to_targets[did].pop(),
+                       "estimation_procudure_type": "crossvalidation with crossvalidation holdout",
+                       "data_splits_url": None,
+                       "estimation_parameters": {"stratified_sampling": "true", "test_folds": 3,
+                                                 "test_fold": 0},
+                       "evaluation_measure": "predictive_accuracy"}
 
-    algo = sklearn.ensemble.RandomForestClassifier(n_jobs=4)
+    with open(os.path.join(custom_tasks_dir, "did_%d.pkl" %
+            task_properties["task_id"]), "w") as fh:
+        cPickle.dump(task_properties, fh)
+
+    task = OpenMLTask(**task_properties)
+
+    random_state = sklearn.utils.check_random_state(42)
+    algo = sklearn.ensemble.RandomForestClassifier(n_jobs=4, random_state=random_state)
     vals = []
     print "DID", did,
     for i in range(10):

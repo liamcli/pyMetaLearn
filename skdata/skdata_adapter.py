@@ -24,6 +24,10 @@ import time
 
 
 import skdata
+import sys
+print sys.path
+print skdata.__file__
+import skdata.base
 from skdata.base import Task
 
 import sklearn.utils
@@ -246,7 +250,7 @@ def show_remote_datasets():
 def show_only_remote_datasets():
     pass
 
-
+"""
 for dataset in reversed(datasets):
     print "###"
     print dataset
@@ -275,3 +279,4 @@ for dataset in reversed(datasets):
     print time.time() - starttime
 
     del task
+"""
