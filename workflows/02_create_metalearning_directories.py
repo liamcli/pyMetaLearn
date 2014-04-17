@@ -1,13 +1,17 @@
 import glob
 import os
 
-ground_truth_dir = "/home/feurerm/thesis/experiments/2014_02_20" \
-    "_gather_metadata_from_openml/"
+import pyMetaLearn.openml.manage_openml_data
+
+ground_truth_dir = "/home/feurerm/thesis/experiments/2014_04_17" \
+    "_gather_new_metadata_from_openml/"
 
 experiments_directory = os.getcwd()
-dataset_dir = os.getenv("OPENML_DATA_DIR")
+local_directory = pyMetaLearn.openml.manage_openml_data.get_local_directory()
+dataset_dir = os.path.join(local_directory, "datasets")
 
-dataset_list = os.listdir(dataset_dir)
+dataset_list = glob.glob(os.path.join(dataset_dir, "did*.xml"))
+print dataset_list
 
 for dataset in dataset_list:
     for fold in range(3):
@@ -20,11 +24,13 @@ for dataset in dataset_list:
         # Create all directories for the search spaces
         directories = dict()
         optimizers = ["gridsearch", "smac_2_06_01-dev",
-                   "hyperopt_august2013_mod", "spearmint_april2013_mod"]
+                   "hyperopt_august2013_mod", "spearmint_april2013_mod",
+                   "random_hyperopt_august2013_mod"]
         for optimizer in optimizers:
             directories[optimizer] = os.path.join(experiment_dir, optimizer)
             os.mkdir(directories[optimizer])
 
+        # Gridsearch
         with open(os.path.join(directories["gridsearch"], "params.pcs"),
                   "w") as fh:
             fh.write("C {-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, "
@@ -32,10 +38,12 @@ for dataset in dataset_list:
                      "gamma {-15, -14, -13, -12, -11, -10 -9, -8, -7, -6, -5, "
                      "-4, -3, -2, -1, 0, 1, 2, 3}")
 
+        # SMAC
         with open(os.path.join(directories["smac_2_06_01-dev"], "params.pcs"),
                   "w") as fh:
             fh.write("C [-5, 15] [1]i\ngamma [-15, 3] [1]i")
 
+        # Hyperopt
         with open(os.path.join(directories["hyperopt_august2013_mod"],
                   "space.py"), "w") as fh:
             fh.write("from hyperopt import hp\n"
@@ -46,8 +54,18 @@ for dataset in dataset_list:
                   "__init__.py"), "w") as fh:
             pass
 
-        # TODO add random search directory
+        # Random search
+        with open(os.path.join(directories["random_hyperopt_august2013_mod"],
+                  "space.py"), "w") as fh:
+            fh.write("from hyperopt import hp\n"
+                     "from hyperopt.pyll import scope\n\n"
+                     "space = {'C': scope.int(hp.quniform('C', -5, 15, 1)),\n'"
+                     "gamma': scope.int(hp.quniform('gamma', -15, 3, 1))}\n")
+        with open(os.path.join(directories["random_hyperopt_august2013_mod"],
+                  "__init__.py"), "w") as fh:
+            pass
 
+        Spearmint
         with open(os.path.join(directories["spearmint_april2013_mod"], "config.pb"),
                   "w") as fh:
             fh.write('language: PYTHON\nname:     "HPOlib.cv"\nvariable {\n' \

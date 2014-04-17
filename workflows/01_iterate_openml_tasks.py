@@ -83,6 +83,6 @@ for did in to_use:
     vals = []
     print "DID", did,
     for i in range(10):
-        vals.append(1. - task.partial_evaluate(algo, 0, 10))
+        vals.append(1. - task.perform_cv_fold(algo, 0, 10))
     print np.mean(vals)
 

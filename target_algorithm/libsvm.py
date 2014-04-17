@@ -13,6 +13,7 @@ import HPOlib.benchmark_util as benchmark_util
 import HPOlib.wrapping_util as wrapping_util
 
 from pyMetaLearn.openml.openml_task import OpenMLTask
+import pyMetaLearn.openml.manage_openml_data
 
 # Specify the size of the kernel test_cache (in MB)
 SVM_CACHE_SIZE = 2000
@@ -60,9 +61,11 @@ def fold_evaluate(params, fold=0, folds=1):
     C = 2.**(float(params["C"]))
     gamma = 2.**(float(params["gamma"]))
     algo = sklearn.svm.SVC(cache_size=SVM_CACHE_SIZE, C=C, gamma=gamma,
-                           kernel="rbf" , random_state=random_state)
+                           kernel="rbf", random_state=random_state)
 
     config = wrapping_util.load_experiment_config_file()
+    pyMetaLearn.openml.manage_openml_data.set_local_directory(config.get(
+        "EXPERIMENT", "openml_data_dir"))
     task_args_pkl = config.get("EXPERIMENT", "task_args_pkl")
     with open(task_args_pkl) as fh:
         task_args = cPickle.load(fh)
@@ -84,14 +87,15 @@ def fold_evaluate(params, fold=0, folds=1):
     elif Y.dtype != np.int32:
         raise NotImplementedError(Y.dtype)
 
-    accuracy = task.perform_cv_fold(algo, fold, folds)
+    print fold, folds
+    accuracy = task.perform_cv_fold(algo, int(fold), int(folds))
     return 1 - accuracy
 
 
 if __name__ == "__main__":
     starttime = time.time()
     args, params = benchmark_util.parse_cli()
-    print params
+    print params, args
     result = fold_evaluate(params, **args)
     duration = time.time() - starttime
     print "Result for ParamILS: %s, %f, 1, %f, %d, %s" % \

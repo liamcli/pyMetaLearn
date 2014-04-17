@@ -52,6 +52,7 @@ class OpenMLDataset(Dataset):
             x.to_pickle(x_path)
             y.to_pickle(y_path)
         else:
+            # TODO: what happens if the target changes...
             with open(x_path) as x_pickle:
                 x = cPickle.load(x_pickle)
             with open(y_path) as y_pickle:
@@ -157,7 +158,8 @@ class OpenMLDataset(Dataset):
             untransformed_array = [instance[idx] for instance in arff["data"]]
             series = pd.Series(untransformed_array, name=attribute_name,
                                dtype=dtype)
-            data_dict[attribute_name] = series
+            # Convert the name to lower space
+            data_dict[attribute_name.lower()] = series
 
         assert pd.isnull(None)
         df = pd.DataFrame(data_dict, copy=True)

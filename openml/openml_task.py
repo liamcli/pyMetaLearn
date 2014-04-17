@@ -58,7 +58,7 @@ class OpenMLTask(object):
     def get_dataset(self):
         dataset = pyMetaLearn.openml.manage_openml_data.get_local_dataset(
             self.dataset_id)
-        X, Y = dataset.get_npy(target=self.target_feature)
+        X, Y = dataset.get_npy(target=self.target_feature.lower())
         return X, Y
 
     def get_train_and_test_set(self, X=None, Y=None):

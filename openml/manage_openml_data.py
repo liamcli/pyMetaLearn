@@ -8,9 +8,10 @@ import StringIO
 import tempfile
 import urllib2
 
+import xmltodict
+
 try:
     from lxml import etree
-    import xmltodict
 except:
     pass
 
