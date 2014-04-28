@@ -71,7 +71,7 @@ def get_local_dataset(did):
     local_directory = get_local_directory()
 
     dataset_dir = os.path.join(local_directory, "datasets")
-    dataset_file = os.path.join(dataset_dir, "did%d.xml" % did)
+    dataset_file = os.path.join(dataset_dir, "did%d.xml" % int(did))
     with open(dataset_file) as fh:
         dataset = pyMetaLearn.openml.openml_dataset.OpenMLDataset\
             .from_xml_file(dataset_file)

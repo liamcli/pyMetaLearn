@@ -2,6 +2,15 @@ from collections import defaultdict
 from collections import OrderedDict
 import numpy as np
 
+import scipy.stats
+from scipy.linalg import LinAlgError
+
+import sklearn
+import sklearn.metrics
+import sklearn.cross_validation
+
+import time
+
 
 class MetafeatureFunctions:
     def __init__(self):
@@ -40,6 +49,10 @@ metafeatures = MetafeatureFunctions()
 def number_of_instances(X, Y):
     return float(X.shape[0])
 
+@metafeatures.define("log_number_of_instances")
+def log_number_of_instances(X, Y):
+    return np.log(metafeatures["number_of_instances"](X, Y))
+
 @metafeatures.define("number_of_classes")
 def number_of_classes(X, Y):
     return float(len(np.unique(Y)))
@@ -47,6 +60,10 @@ def number_of_classes(X, Y):
 @metafeatures.define("number_of_features")
 def number_of_features(X, Y):
     return float(X.shape[1])
+
+@metafeatures.define("log_number_of_features")
+def number_of_features(X, Y):
+    return np.log(metafeatures["number_of_features"](X, Y))
 
 @metafeatures.define("number_of_Instances_with_missing_values")
 def number_of_Instances_with_missing_values(X, Y):
@@ -119,17 +136,24 @@ def ratio_nominal_to_numerical(X, Y):
     else:
         return num_categorical / num_numerical
 
-
 # Number of attributes divided by number of samples
-@metafeatures.define("dimensionality")
-def dimensionality(X, Y):
+@metafeatures.define("dataset_ratio")
+def dataset_ratio(X, Y):
     return float(metafeatures["number_of_features"](X, Y)) /\
         float(metafeatures["number_of_instances"](X, Y))
 
-@metafeatures.define("inverse_dimensionality")
-def inverse_dimensionality(X, Y):
+@metafeatures.define("log_dataset_ratio")
+def log_dataset_ratio(X, Y):
+    return np.log(metafeatures["dataset_ratio"](X, Y))
+
+@metafeatures.define("inverse_dataset_ratio")
+def inverse_dataset_ratio(X, Y):
     return float(metafeatures["number_of_instances"](X, Y)) /\
         float(metafeatures["number_of_features"](X, Y))
+
+@metafeatures.define("log_inverse_dataset_ratio")
+def log_inverse_dataset_ratio(X, Y):
+    return np.log(metafeatures["inverse_dataset_ratio"](X, Y))
 
 """
 @metafeatures.define("nominal_min(")
@@ -194,11 +218,337 @@ def class_probability_std(X, Y):
                          dtype=np.float64)
     return (occurences / Y.size).std()
 
-def calculate_all_metafeatures(X, Y):
+################################################################################
+# Landmarking features, computed with cross validation
+# These should be invoked with the same transformations of X and Y with which
+# sklearn will be called later on
+
+# from Pfahringer 2000
+# Linear discriminant learner
+@metafeatures.define("landmark_lda")
+def landmark_lda(X, Y):
+    import sklearn.lda
+    kf = sklearn.cross_validation.StratifiedKFold(Y, n_folds=10, indices=True)
+    accuracy = 0.
+    try:
+        for train, test in kf:
+            lda = sklearn.lda.LDA()
+            lda.fit(X[train], Y[train])
+            predictions = lda.predict(X[test])
+            accuracy += sklearn.metrics.accuracy_score(predictions, Y[test])
+        return 1 - (accuracy / 10)
+    except scipy.linalg.LinAlgError as e:
+        print "!!!", e, "Returned 1 instead!"
+        return 1
+
+# Naive Bayes
+@metafeatures.define("landmark_naive_bayes")
+def landmark_naive_bayes(X, Y):
+    import sklearn.naive_bayes
+    kf = sklearn.cross_validation.StratifiedKFold(Y, n_folds=10, indices=True)
+    accuracy = 0.
+    for train, test in kf:
+        nb = sklearn.naive_bayes.MultinomialNB()
+        try:
+            nb.fit(X[train], Y[train])
+        except ValueError:
+            print X[train]
+            raise Exception
+        predictions = nb.predict(X[test])
+        accuracy += sklearn.metrics.accuracy_score(predictions, Y[test])
+    return 1 - (accuracy / 10)
+
+# Cart learner instead of C5.0
+@metafeatures.define("landmark_decision_tree")
+def landmark_decision_tree(X, Y):
+    import sklearn.tree
+    kf = sklearn.cross_validation.StratifiedKFold(Y, n_folds=10, indices=True)
+    accuracy = 0.
+    for train, test in kf:
+        random_state = sklearn.utils.check_random_state(42)
+        tree = sklearn.tree.DecisionTreeClassifier(random_state=random_state)
+        tree.fit(X[train], Y[train])
+        predictions = tree.predict(X[test])
+        accuracy += sklearn.metrics.accuracy_score(predictions, Y[test])
+    return 1 - (accuracy / 10)
+
+"""If there is a dataset which has OneHotEncoded features it can happend that
+a node learner splits at one of the attribute encodings. This should be fine
+as the dataset is later on used encoded."""
+
+# TODO: use the same forest, this has then to be computed only once and hence
+#  saves a lot of time...
+@metafeatures.define("landmark_decision_node_learner")
+def landmark_decision_node_learner(X, Y):
+    import sklearn.tree
+    kf = sklearn.cross_validation.StratifiedKFold(Y, n_folds=10, indices=True)
+    accuracy = 0.
+    for train, test in kf:
+        random_state = sklearn.utils.check_random_state(42)
+        node = sklearn.tree.DecisionTreeClassifier(criterion="entropy",
+            max_features=None, max_depth=1, min_samples_split=1,
+            min_samples_leaf=1, random_state=random_state)
+        node.fit(X[train], Y[train])
+        predictions = node.predict(X[test])
+        accuracy += sklearn.metrics.accuracy_score(predictions, Y[test])
+    return 1 - (accuracy / 10)
+
+@metafeatures.define("landmark_random_node_learner")
+def landmark_random_node_learner(X, Y):
+    import sklearn.tree
+    kf = sklearn.cross_validation.StratifiedKFold(Y, n_folds=10, indices=True)
+    accuracy = 0.
+    rs = np.random.RandomState(int(42./np.log(X.shape[1])))
+    attribute_idx = rs.randint(0, X.shape[1])
+
+    for train, test in kf:
+        random_state = sklearn.utils.check_random_state(42)
+        node = sklearn.tree.DecisionTreeClassifier(
+            criterion="entropy", max_depth=1, random_state=random_state,
+            min_samples_split=1, min_samples_leaf=1, max_features=None)
+        node.fit(X[train][:,attribute_idx].reshape((-1, 1)), Y[train])
+        predictions = node.predict(X[test][:,attribute_idx].reshape((-1, 1)))
+        accuracy += sklearn.metrics.accuracy_score(predictions, Y[test])
+    return 1 - (accuracy / 10)
+
+"""
+This is wrong...
+@metafeatures.define("landmark_worst_node_learner")
+def landmark_worst_node_learner(X, Y):
+    # TODO: this takes more than 10 minutes on some datasets (eg mfeat-pixels)
+    # which has 240*6 = 1440 discrete attributes...
+    # TODO: calculate information gain instead of using the worst test result
+    import sklearn.tree
+    performances = []
+    for attribute_idx in range(X.shape[1]):
+        kf = sklearn.cross_validation.StratifiedKFold(Y, n_folds=10, indices=True)
+        accuracy = 0.
+        for train, test in kf:
+            node = sklearn.tree.DecisionTreeClassifier(criterion="entropy",
+                max_features=None, max_depth=1, min_samples_split=1,
+                min_samples_leaf=1)
+            node.fit(X[train][:,attribute_idx].reshape((-1, 1)), Y[train],
+                     check_input=False)
+            predictions = node.predict(X[test][:,attribute_idx].reshape((-1, 1)))
+            accuracy += sklearn.metrics.accuracy_score(predictions, Y[test])
+        performances.append(1 - (accuracy / 10))
+    return max(performances)
+"""
+
+# Replace the Elite 1NN with a normal 1NN, this slightly changes the
+# intuition behind this landmark, but Elite 1NN is used nowhere else...
+@metafeatures.define("landmark_1NN")
+def landmark_1NN(X, Y):
+    import sklearn.neighbors
+    kf = sklearn.cross_validation.StratifiedKFold(Y, n_folds=10, indices=True)
+    accuracy = 0.
+    for train, test in kf:
+        lda = sklearn.neighbors.KNeighborsClassifier(1)
+        lda.fit(X[train], Y[train])
+        predictions = lda.predict(X[test])
+        accuracy += sklearn.metrics.accuracy_score(predictions, Y[test])
+    return 1 - (accuracy / 10)
+
+################################################################################
+# Bardenet 2013 - Collaborative Hyperparameter Tuning
+# K number of classes ("number_of_classes")
+# log(d), log(number of attributes)
+# log(n/d), log(number of training instances/number of attributes)
+# p, how many principal components to keep in order to retain 95% of the
+#     dataset variance
+# skewness of a dataset projected onto one principal component...
+# kurtosis of a dataset projected onto one principal component
+
+pca_object = None
+
+# Maybe define some more...
+@metafeatures.define("pca_95%")
+def pca_95percent(X, Y):
+    if pca_object is None:
+        import sklearn.decomposition
+        pca = sklearn.decomposition.PCA(copy=True)
+        rs = np.random.RandomState(42)
+        indices = np.arange(X.shape[0])
+        for i in range(10):
+            try:
+                rs.shuffle(indices)
+                pca.fit(X)
+                break
+            except LinAlgError as e:
+                pass
+            print "Wasn't able to fit a PCA."
+            return 1    # Needs all components...
+
+        global pca_object
+        pca_object = pca
+    else:
+        pca = pca_object
+
+    sum_ = 0.
+    idx = 0
+    while sum_ < 0.95:
+        sum_ += pca.explained_variance_ratio_[idx]
+        idx += 1
+    return float(idx)/float(X.shape[1])
+
+# Kurtosis of first PC
+@metafeatures.define("pca_kurtosis_first_pc")
+def pca_kurtosis_first_pc(X, Y):
+    if pca_object is None:
+        import sklearn.decomposition
+        pca = sklearn.decomposition.PCA(copy=True)
+        rs = np.random.RandomState(42)
+        indices = np.arange(X.shape[0])
+        for i in range(10):
+            try:
+                rs.shuffle(indices)
+                pca.fit(X)
+                break
+            except LinAlgError as e:
+                pass
+            print "Wasn't able to fit a PCA."
+            return 0    # Some default...
+
+        global pca_object
+        pca_object = pca
+    else:
+        pca = pca_object
+
+    components = pca.components_
+    pca.components_ = components[:1]
+    transformed = pca.transform(X)
+    pca.components_ = components
+
+    kurtosis = scipy.stats.kurtosis(transformed)
+    return kurtosis[0]
+
+# Skewness of first PC
+@metafeatures.define("pca_skewness_first_pc")
+def pca_skewness_first_pc(X, Y):
+    if pca_object is None:
+        import sklearn.decomposition
+        pca = sklearn.decomposition.PCA(copy=True)
+        rs = np.random.RandomState(42)
+        indices = np.arange(X.shape[0])
+        for i in range(10):
+            try:
+                rs.shuffle(indices)
+                pca.fit(X)
+                break
+            except LinAlgError as e:
+                pass
+            print "Wasn't able to fit a PCA."
+            return 0    # Some default...
+
+        global pca_object
+        pca_object = pca
+    else:
+        pca = pca_object
+
+    components = pca.components_
+    pca.components_ = components[:1]
+    transformed = pca.transform(X)
+    pca.components_ = components
+
+    skewness = scipy.stats.skew(transformed)
+    return skewness[0]
+
+def calculate_all_metafeatures(dataset, subset_indices=None,
+        calculate=None, dont_calculate=None):
     mf = OrderedDict()
+    Xnpy = Ynpy = Xpd = Ypd = None
+
     for name in metafeatures:
-        mf[name] = metafeatures[name](X, Y)
+        if calculate is not None and name not in calculate:
+            continue
+        if dont_calculate is not None and name in dont_calculate:
+            continue
+
+        if Xnpy is None:
+            Xnpy, Ynpy = dataset.get_npy(scaling="scale")
+            Xpd, Ypd = dataset.get_pandas()
+
+            if subset_indices is not None:
+                subset_indices = np.array([True if i in subset_indices else False for \
+                        i in range(Xnpy.shape[0])])
+                Xnpy = Xnpy[subset_indices]
+                Ynpy = Ynpy[subset_indices]
+                Xpd = Xpd[subset_indices]
+                Ypd = Ypd[subset_indices]
+
+        if name in npy_metafeatures:
+            # This is not only important for datasets which are somehow
+            # sorted in a strange way, but also provents lda from failing in
+            # some cases...
+            X, Y = Xnpy, Ynpy
+            rs = np.random.RandomState(42)
+            indices = np.arange(X.shape[0])
+            rs.shuffle(indices)
+            X = X[indices]
+            Y = Y[indices]
+        else:
+            X, Y = Xpd, Ypd
+
+        starttime = time.time()
+        try:
+            mf[name] = metafeatures[name](X, Y)
+            print name, "took", time.time() - starttime, "seconds, result", \
+                 mf[name]
+        except Exception as e:
+            print "!!!", name, "Failed", e
+
+
+    # Delete intermediate variables
+    global pca_object
+    pca_object = None
     return mf
 
-def calculate_missing_metafeatures(X, Y, dict_):
-    raise NotImplementedError()
+
+npy_metafeatures = set(["landmark_lda", "landmark_naive_bayes",
+                        "landmark_decision_tree",
+                        "landmark_decision_node_learner",
+                        "landmark_random_node_learner",
+                        "landmark_worst_node_learner", "landmark_1NN",
+                        "pca_95%", "pca_kurtosis_first_pc", "pca_skewness_first_pc"])
+
+subsets = dict()
+# All implemented metafeatures
+subsets["all"] = set(metafeatures.functions.keys())
+
+# Metafeatures used by Pfahringer et al. (2000) in the first experiment
+subsets["pfahringer_2000_experiment1"] = set(["number_of_features",
+                                             "number_of_numeric_features",
+                                             "number_of_categorical_features",
+                                             "number_of_classes",
+                                             "class_probability_max",
+                                             "landmark_lda",
+                                             "landmark_naive_bayes",
+                                             "landmark_decision_tree"])
+
+# Metafeatures used by Pfahringer et al. (2000) in the second experiment
+# worst node learner not implemented yet
+"""
+pfahringer_2000_experiment2 = set(["landmark_decision_node_learner",
+                                   "landmark_random_node_learner",
+                                   "landmark_worst_node_learner",
+                                   "landmark_1NN"])
+"""
+
+# Metafeatures used by Yogotama and Mann (2014)
+subsets["yogotama_2014"] = set(["log_number_of_features",
+                               "log_number_of_instances",
+                               "number_of_classes"])
+
+# Metafeatures used by Bardenet et al. (2013) for the AdaBoost.MH experiment
+subsets["bardenet_2013_boost"] = set(["number_of_classes",
+                                     "log_number_of_features",
+                                     "log_inverse_dataset_ratio", "pca_95%"])
+
+# Metafeatures used by Bardenet et al. (2013) for the Neural Net experiment
+subsets["bardenet_2013_nn"] = set(["number_of_classes",
+                                  "log_number_of_features",
+                                  "log_inverse_dataset_ratio",
+                                  "pca_kurtosis_first_pc",
+                                  "pca_skewness_first_pc"])
+
+

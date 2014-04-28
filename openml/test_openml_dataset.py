@@ -14,7 +14,7 @@ from openml_dataset import OpenMLDataset
 class TestOpenMLDataset(unittest.TestCase):
     def setUp(self):
         os.chdir(os.path.dirname(__file__))
-        fh = open("test_cache/did1_anneal.arff")
+        fh = open("test_cache/datasets.arff")
         self.arff_object = arff.load(fh)
         fh.close()
         self.ds = OpenMLDataset("OpenML", 1, "anneal", None, None, "arff",
@@ -30,7 +30,7 @@ class TestOpenMLDataset(unittest.TestCase):
         self.assertEqual(X.max(), 4880)
 
         X, Y = self.ds._convert_arff_structure_to_npy(self.arff_object,
-                                                      scaling="normalize")
+                                                      scaling="scale")
         self.assertEqual(X.min(), 0)
         self.assertEqual(X.max(), 1)
 

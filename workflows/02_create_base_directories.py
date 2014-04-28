@@ -9,7 +9,7 @@ pyMetaLearn.openml.manage_openml_data.set_local_directory(
     "/home/feurerm/thesis/datasets/openml/")
 local_directory = pyMetaLearn.openml.manage_openml_data.get_local_directory()
 dataset_dir = os.path.join(local_directory, "datasets")
-sge_commands_file = os.path.join(experiments_directory, "sge_commands.txt")
+commands = []
 
 optimizers = ["gridsearch", "smac_2_06_01-dev",
               "hyperopt_august2013_mod", "spearmint_april2013_mod",
@@ -114,16 +114,23 @@ for dataset in dataset_list:
             fh.write(content)
 
         ########################################################################
-        # Write the SGE commands to a file
-        with open(sge_commands_file, "a") as fh:
-            for optimizer in optimizers:
-                if optimizer != "gridsearch":
-                    for seed in range(1000, 10001, 1000):
-                        fh.write("HPOlib-run -s %d -o %s --cwd %s\n"
-                          % (seed, optimizer_locations[optimizer], experiment_dir))
-                else:
-                    fh.write("HPOlib-run -o %s --cwd %s\n"
-                         % (optimizer_locations[optimizer], experiment_dir))
+        # Prepare SGE commands for a file
+
+        for optimizer in optimizers:
+            if optimizer != "gridsearch":
+                for seed in range(1000, 10001, 1000):
+                    commands.append("HPOlib-run -o %s -s %d --cwd %s\n"
+                      % (optimizer_locations[optimizer], seed, experiment_dir))
+            else:
+                commands.append("HPOlib-run -o %s --cwd %s\n"
+                     % (optimizer_locations[optimizer], experiment_dir))
+
+commands.sort()
+sge_commands_file = os.path.join(experiments_directory, "sge_commands.txt")
+with open(sge_commands_file, "a") as fh:
+    for command in commands:
+        fh.write(command)
+
 
 with open(os.path.join(experiments_directory, "init_experiment.sh"), "w") as fh:
     fh.write("source /home/feurerm/.bashrc\n")

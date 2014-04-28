@@ -4,6 +4,7 @@ import os
 import numpy as np
 from openml.openml_dataset import OpenMLDataset
 import pyMetaLearn.metafeatures.metafeatures as meta_features
+import pyMetaLearn.openml.manage_openml_data
 import arff
 
 __author__ = 'feurerm'
@@ -12,15 +13,20 @@ __author__ = 'feurerm'
 class TestMetaFeatures(TestCase):
     def setUp(self):
         os.chdir(os.path.dirname(__file__))
-        fh = open("../openml/test_cache/did1_anneal.arff")
+        fh = open("../openml/test_cache/datasets/did1_anneal.arff")
         self.arff_object = arff.load(fh)
         fh.close()
+        pyMetaLearn.openml.manage_openml_data.set_local_directory(
+            os.path.join(os.path.dirname(pyMetaLearn.openml.__file__), "test_cache"))
         self.ds = OpenMLDataset("OpenML", 1, "anneal", None, None, "arff",
                                 None, None,
-                                "/home/feurerm/thesis/Software/pyMetaLearn/openml/test_cache", True)
-        X, Y = self.ds.get_processed_files()
+                                "/home/feurerm/thesis/Software/pyMetaLearn/openml/test_cache", None, True)
+        X, Y = self.ds.get_pandas()
         self.X = X
         self.Y = Y
+        Xnp, Ynp = self.ds.get_npy(scaling="scale")
+        self.Xnp = Xnp
+        self.Ynp = Ynp
         self.mf = meta_features.metafeatures
 
     def test_number_of_instance(self):
@@ -88,9 +94,14 @@ class TestMetaFeatures(TestCase):
         self.assertAlmostEqual(mf, float(32)/float(6))
         self.assertIsInstance(mf, float)
 
-    def test_dimensionality(self):
-        mf = self.mf["dimensionality"](self.X, self.Y)
+    def test_dataset_ratio(self):
+        mf = self.mf["dataset_ratio"](self.X, self.Y)
         self.assertAlmostEqual(mf, float(38)/float(898))
+        self.assertIsInstance(mf, float)
+
+    def test_inverse_dataset_ratio(self):
+        mf = self.mf["inverse_dataset_ratio"](self.X, self.Y)
+        self.assertAlmostEqual(mf, float(898)/float(38))
         self.assertIsInstance(mf, float)
 
     def test_class_probability_min(self):
@@ -116,3 +127,44 @@ class TestMetaFeatures(TestCase):
         prob_std = (classes / float(898)).std()
         self.assertAlmostEqual(mf, prob_std)
         self.assertIsInstance(mf, float)
+
+    def test_landmark_lda(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["landmark_lda"](self.Xnp, self.Ynp)
+
+    def test_landmark_naive_bayes(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["landmark_naive_bayes"](self.Xnp, self.Ynp)
+
+    def test_landmark_decision_tree(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["landmark_decision_tree"](self.Xnp, self.Ynp)
+
+    def test_decision_node(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["landmark_decision_node_learner"](self.Xnp, self.Ynp)
+
+    def test_random_node(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["landmark_random_node_learner"](self.Xnp, self.Ynp)
+
+    def test_worst_node(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["landmark_worst_node_learner"](self.Xnp, self.Ynp)
+
+    def test_1NN(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["landmark_1NN"](self.Xnp, self.Ynp)
+
+    def test_pca_95percent(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["pca_95%"](self.Xnp, self.Ynp)
+        print self.mf["pca_95%"](self.Xnp, self.Ynp)
+
+    def test_pca_kurtosis_first_pc(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["pca_kurtosis_first_pc"](self.Xnp, self.Ynp)
+
+    def test_pca_skewness_first_pc(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["pca_skewness_first_pc"](self.Xnp, self.Ynp)

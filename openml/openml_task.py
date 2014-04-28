@@ -61,7 +61,7 @@ class OpenMLTask(object):
         X, Y = dataset.get_npy(target=self.target_feature.lower())
         return X, Y
 
-    def get_train_and_test_set(self, X=None, Y=None):
+    def get_train_and_test_set(self, X=None, Y=None, test_fold=None):
         if X is None and Y is None:
             # TODO: at some point get the split from OpenML
             X, Y = self.get_dataset()
@@ -74,7 +74,8 @@ class OpenMLTask(object):
             raise NotImplementedError()
 
         test_folds = self.estimation_procedure["parameters"]["test_folds"]
-        test_fold = self.estimation_procedure["parameters"]["test_fold"]
+        if test_fold is None:
+            test_fold = self.estimation_procedure["parameters"]["test_fold"]
         print "Tests folds", test_fold, test_folds
 
         split = self._get_fold(X, Y, fold=test_fold, folds=test_folds)

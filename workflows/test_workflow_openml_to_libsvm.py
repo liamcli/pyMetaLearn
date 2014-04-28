@@ -43,7 +43,7 @@ class TestWorkflow(unittest.TestCase):
 
         X, Y = dataset.get_pandas(target="class")
         self.assertTrue(os.path.exists(os.path.join(self.tmp_dir, "datasets",
-                                                    "did1_anneal.arff")))
+                                                    "datasets.arff")))
 
         # TODO: these do not yet add the class (Y) at the end...
         with open(os.path.join(self.tmp_dir, "anneal.html"), "w") as fh:

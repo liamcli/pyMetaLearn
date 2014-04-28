@@ -17,6 +17,7 @@ def main(params, **kwargs):
     results_pickle = cPickle.load(pickle_file)
     pickle_file.close()
     ground_truth = dict()
+    measured_times = dict()
 
     for trial in results_pickle["trials"]:
         if not np.isfinite(trial["result"]) and \
@@ -28,8 +29,10 @@ def main(params, **kwargs):
                                         key=lambda t: t[0])))
         if folds > 1:
             ground_truth[parameters] = trial["instance_results"][fold]
+            measured_times[parameters] = trial["instance_durations"][fold]
         else:
             ground_truth[parameters] = trial["result"]
+            measured_times[parameters] = trial["duration"]
 
     params_hack = dict()
     for key in params:

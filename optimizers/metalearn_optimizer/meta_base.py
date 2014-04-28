@@ -1,7 +1,18 @@
 from collections import OrderedDict
+import logging
 import pandas as pd
 import os
 import cPickle
+
+import numpy as np
+
+import pyMetaLearn.metafeatures.metafeatures
+
+logging.basicConfig(format='[%(levelname)s] [%(asctime)s:%(name)s] %('
+                           'message)s', datefmt='%H:%M:%S')
+logger = logging.getLogger("META_BASE")
+logger.setLevel(logging.INFO)
+
 
 class MetaBase(object):
     def __init__(self, datasets, experiments):
@@ -44,18 +55,32 @@ class MetaBase(object):
         """
         return self.experiments[dataset_name]
 
-    def get_metadata_as_pandas(self, dataset_name):
-        features = self.datasets[dataset_name].get_metafeatures()
+    def get_metadata_as_pandas(self, dataset_name, subset_indices=None,
+                               metafeature_subset=None):
+        features = self.datasets[dataset_name].get_metafeatures(subset_indices)
         df = pd.Series(data=features, name=dataset_name)
+
+        if metafeature_subset is not None:
+            subset = pyMetaLearn.metafeatures.metafeatures.subsets[metafeature_subset]
+            df = df.loc[subset]
+            if len(df) == 0:
+                logger.warn("Warning, empty metadata for ds %s" % dataset_name)
+
+        if not np.isfinite(df.values).all():
+            logger.warn(df)
+            logger.warn(metafeature_subset)
+            raise ValueError("Metafeatures contain non-finite values.")
         return df
 
-    def get_all_metadata_as_pandas(self):
+    def get_all_metadata_as_pandas(self, subset_indices=None,
+                                   metafeature_subset=None):
         """Create a pandas DataFrame for the metadata of all datasets."""
         series = []
 
         datasets = self.get_datasets()
         for key in datasets:
-            series.append(self.get_metadata_as_pandas(key))
+            series.append(self.get_metadata_as_pandas(key, subset_indices,
+                                                      metafeature_subset))
 
         retval = pd.DataFrame(series)
         return retval

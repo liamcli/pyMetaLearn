@@ -19,21 +19,11 @@ Exceptions are
 - Caltech 256: No view available
 """
 from collections import OrderedDict
-import types
-import time
 
 
 import skdata
-import sys
-print sys.path
-print skdata.__file__
 import skdata.base
 from skdata.base import Task
-
-import sklearn.utils
-import sklearn.ensemble.forest as RandomForest
-import sklearn.svm
-import sklearn.metrics
 
 # TODO: add PIL to dependencies
 import skdata.cifar10
@@ -214,11 +204,11 @@ tasks["mnist"].prepare = \
 
 
 def get_local_directory():
-    return skdata.data_home.get_data_home()
+    return skdata_.data_home.get_data_home()
 
 
 def set_local_directory(newpath):
-    return skdata.data_home.set_data_home(newpath)
+    return skdata_.data_home.set_data_home(newpath)
 
 
 def get_local_datasets():

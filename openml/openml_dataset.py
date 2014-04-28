@@ -2,6 +2,7 @@ __author__ = 'feurerm'
 
 import cPickle
 from collections import OrderedDict
+import lockfile
 import os
 import time
 import types
@@ -59,9 +60,10 @@ class OpenMLDataset(Dataset):
                 y = cPickle.load(y_pickle)
         return x, y
 
-    def get_npy(self, target=None):
+    def get_npy(self, target=None, replace_missing_with=0, scaling=None):
         arff = self.get_unprocessed_files()
-        x, y = self._convert_arff_structure_to_npy(arff, target=target)
+        x, y = self._convert_arff_structure_to_npy(arff, target=target,
+            replace_missing_with=replace_missing_with, scaling=scaling)
         return x, y
 
     def get_arff_filename(self):
@@ -71,6 +73,7 @@ class OpenMLDataset(Dataset):
 
     def get_unprocessed_files(self):
         output_path = self.get_arff_filename()
+        print output_path
         if not os.path.exists(output_path):
             print "Download file"
             self._fetch_dataset(output_path)
@@ -80,7 +83,7 @@ class OpenMLDataset(Dataset):
         import struct
         bits = ( 8 * struct.calcsize("P"))
         if bits != 64 and os.path.getsize(output_path) > 120000000:
-            return None
+            return NotImplementedError("File too big")
 
         fh = open(output_path)
         arff_object = arff.load(fh)
@@ -279,7 +282,7 @@ class OpenMLDataset(Dataset):
         if not np.any(np.isfinite(array)):
             raise NotImplementedError()
 
-        if scaling == "normalize":
+        if scaling == "scale":
             array = self.normalize_scaling(array)
         elif scaling == "zero_mean":
             array = self.normalize_standardize(array)
@@ -316,19 +319,39 @@ class OpenMLDataset(Dataset):
         x, y = self.get_pandas()
         x.to_csv(file_handle)
 
-    def get_metafeatures(self):
+
+    def get_metafeatures(self, subset_indices=None):
+        # Bad implementation of metafeature caching...
+        if type(subset_indices) not in (None, tuple):
+            raise NotImplementedError(str(type(subset_indices)))
+
         metafeatures_filename = os.path.join(self.openMLBasePath(),
                                              "metafeatures",
                                              "metafeatures.pkl")
+
         if os.path.exists(metafeatures_filename):
             with open(metafeatures_filename) as fh:
                 metafeatures = cPickle.load(fh)
         else:
-            x, y = self.get_pandas()
-            metafeatures = calculate_all_metafeatures(x, y)
-            with open(metafeatures_filename, "w") as fh:
-                cPickle.dump(metafeatures, fh)
-        return metafeatures
+            metafeatures = dict()
+
+        if self._name not in metafeatures:
+            metafeatures[self._name] = dict()
+        if subset_indices not in metafeatures[self._name]:
+            metafeatures[self._name][subset_indices] = dict()
+
+        new = calculate_all_metafeatures(self, dont_calculate=metafeatures
+            [self._name][subset_indices], subset_indices=subset_indices)
+        if len(new) > 0:
+            metafeatures[self._name][subset_indices].update(new)
+
+            lock = lockfile.FileLock(metafeatures_filename)
+            with lock:
+                with open(metafeatures_filename, "w") as fh:
+                    cPickle.dump(metafeatures, fh)
+
+        return metafeatures[self._name][subset_indices]
+
 
     def _read_url(self, url):
         return pyMetaLearn.openml.manage_openml_data._read_url(url)
