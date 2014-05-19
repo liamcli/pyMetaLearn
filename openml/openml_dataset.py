@@ -41,6 +41,7 @@ class OpenMLDataset(Dataset):
         pass
 
     def get_pandas(self, target=None):
+        # TODO: add target to the path
         x_path = os.path.join(self.openMLBasePath(), "datasets", "did%d_x.df"
                                                                  % self._id)
         y_path = os.path.join(self.openMLBasePath(), "datasets", "did%d_y.df"
@@ -61,9 +62,24 @@ class OpenMLDataset(Dataset):
         return x, y
 
     def get_npy(self, target=None, replace_missing_with=0, scaling=None):
-        arff = self.get_unprocessed_files()
-        x, y = self._convert_arff_structure_to_npy(arff, target=target,
-            replace_missing_with=replace_missing_with, scaling=scaling)
+        # TODO: add target to the path
+        x_path = os.path.join(self.openMLBasePath(), "datasets", "did%d_x.npy"
+                                                                 % self._id)
+        y_path = os.path.join(self.openMLBasePath(), "datasets", "did%d_y.npy"
+                                                                 % self._id)
+        if not (os.path.exists(x_path) and os.path.exists(y_path)):
+            arff = self.get_unprocessed_files()
+            x, y = self._convert_arff_structure_to_npy(arff, target=target,
+                replace_missing_with=replace_missing_with, scaling=scaling)
+            with open(x_path, "w") as fh:
+                np.save(fh, x)
+            with open(y_path, "w") as fh:
+                np.save(fh, y)
+        else:
+            with open(x_path) as fh:
+                x = np.load(fh)
+            with open(y_path) as fh:
+                y = np.load(fh)
         return x, y
 
     def get_arff_filename(self):
@@ -327,7 +343,8 @@ class OpenMLDataset(Dataset):
 
         metafeatures_filename = os.path.join(self.openMLBasePath(),
                                              "metafeatures",
-                                             "metafeatures.pkl")
+                                             "metafeatures_did_%d.pkl" %
+                                             self._id)
 
         if os.path.exists(metafeatures_filename):
             with open(metafeatures_filename) as fh:

@@ -1,4 +1,5 @@
 import cPickle
+from collections import defaultdict
 import glob
 import os
 
@@ -13,10 +14,13 @@ pyMetaLearn.openml.manage_openml_data.set_local_directory(
     "/home/feurerm/thesis/datasets/openml/")
 local_directory = pyMetaLearn.openml.manage_openml_data.get_local_directory()
 dataset_dir = os.path.join(local_directory, "datasets")
+model_dir = os.path.join(local_directory, "models_distances")
+if not os.path.exists(model_dir):
+    os.mkdir(model_dir)
 
-commands = []
-metalearning_commands = []
-bootstrap_commands = []
+commands = defaultdict(list)
+metalearning_commands = defaultdict(list)
+bootstrap_commands = defaultdict(list)
 
 dataset_list = glob.glob(os.path.join(dataset_dir, "did*.xml"))
 used_datasets = []
@@ -144,7 +148,7 @@ for dataset_filename in dataset_list:
         with open(os.path.join(experiment_dir, "config.cfg"), "w") as fh:
             content = "[HPOLIB]\n"
             content += "function = python -m pyMetaLearn.target_algorithm.reuse_results\n"
-            content += "number_of_jobs = 200\n"
+            content += "number_of_jobs = 50\n"
             content += "result_on_terminate = 1\n"
             content += "number_cv = 1\n"
             content += "[EXPERIMENT]\n"
@@ -155,6 +159,9 @@ for dataset_filename in dataset_list:
             content += "openml_data_dir = %s\n" % local_directory
             content += "[METALEARNING]\n"
             content += "distance_measure = l1\n"
+            content += "learnt_distance_model = %s\n" % os.path.join(
+                model_dir, "rf_testfold_0-3_spearman_rank_perm_%s.pkl" %
+                           dataset._name)
             content += "metafeatures_subset = all\n"
             content += "datasets = " \
                        "/home/feurerm/thesis/experiments/2014_04_23_simple_metalearning/datasets.txt\n"
@@ -173,12 +180,12 @@ for dataset_filename in dataset_list:
                                  "spearmint_gitfork_mod",
                                  "spearmint_bootstrapped"):
                 for seed in range(1000, 10001, 1000):
-                    commands.append("HPOlib-run -o %s -s %d --cwd %s\n"
+                    commands[fold].append("HPOlib-run -o %s -s %d --cwd %s\n"
                       % (optimizer_locations[optimizer], seed, experiment_dir))
 
             elif optimizer == "spearmint_gitfork_mod":
                 for seed in range(1000, 10001, 1000):
-                    commands.append("HPOlib-run -o %s -s %d "
+                    commands[fold].append("HPOlib-run -o %s -s %d "
                         "--SPEARMINT:path_to_optimizer %s --cwd %s\n"
                         % (optimizer_locations[optimizer], seed,
                          "/home/feurerm/thesis/Software/spearmint",
@@ -186,16 +193,16 @@ for dataset_filename in dataset_list:
 
             elif optimizer == "spearmint_bootstrapped":
                 for seed in range(1000, 10001, 1000):
-                    bootstrap_commands.append("HPOlib-run -o %s -s %d "
+                    bootstrap_commands[fold].append("HPOlib-run -o %s -s %d "
                         "--SPEARMINT:path_to_optimizer %s --cwd %s"
                         % (optimizer_locations[optimizer], seed,
                          "/home/feurerm/thesis/Software/spearmint",
                          experiment_dir))
 
             elif optimizer == "metalearning_optimizer":   # Metalearner
-                commands.append("HPOlib-run -o %s --cwd %s\n"
+                commands[fold].append("HPOlib-run -o %s --cwd %s\n"
                      % (optimizer_locations[optimizer], experiment_dir))
-                metalearning_commands.append("HPOlib-run -o %s --cwd %s"
+                metalearning_commands[fold].append("HPOlib-run -o %s --cwd %s"
                      % (optimizer_locations[optimizer], experiment_dir))
 
             else:
@@ -205,19 +212,22 @@ for dataset_filename in dataset_list:
 # Write the actual SGE files
 test_commands = []
 
-commands.sort()
-smbo_on_grid_file = os.path.join(experiments_directory, "smbo_on_grid.txt")
-with open(smbo_on_grid_file, "a") as fh:
-    for command in commands:
-        fh.write(command)
+
+smbo_on_grid_file = os.path.join(experiments_directory,
+                                 "smbo_on_grid_testfold%d.txt")
+for fold in range(3):
+    commands[fold].sort()
+    with open(smbo_on_grid_file % fold, "a") as fh:
+        for command in commands[fold]:
+            fh.write(command)
 
 # Add one command per optimizer to the test commands
-step_size = len(commands) / (len(optimizers) - 2)
+step_size = len(commands[0]) / (len(optimizers) - 2)
 command_indices = [i * step_size for i in range((len(optimizers) - 1))]
 for command_idx in command_indices:
-    test_commands.append(commands[command_idx])
+    test_commands.append(commands[0][command_idx])
 
-metalearning_commands.sort()
+
 instantiations = {"all": "--METALEARNING:metafeatures_subset all",
                   "pfahringer_2000_experiment1": "--METALEARNING:metafeatures_subset pfahringer_2000_experiment1",
                   # "pfahringer_2": "--METALEARNING:metafeatures_subset pfahringer_2000_experiment2",
@@ -226,37 +236,48 @@ instantiations = {"all": "--METALEARNING:metafeatures_subset all",
                   "bardenet_2013_nn": "--METALEARNING:metafeatures_subset bardenet_2013_nn",}
 distance_measures = ["l1", "l2"]
 
-for instance in instantiations:
-    for measure in distance_measures:
-        metal_on_grid_file = os.path.join(experiments_directory,
-            "metal_on_grid_%s-distance_%s-features.txt" % (measure, instance))
-        with open(metal_on_grid_file, "a") as fh:
-            for command in metalearning_commands:
-                command = "%s --METALEARNING:distance_measure %s  " \
-                         "--METALEARNING:metafeatures_subset %s\n" % \
-                         (command, measure, instance)
-                fh.write(command)
-            test_commands.append(command)
-
-
-
-bootstrap_commands.sort()
-bootstrap_samples = (2, 5, 10)
-for instance in instantiations:
-    for measure in distance_measures:
-        for samples in bootstrap_samples:
-            bootstrap_on_grid_file = os.path.join(experiments_directory,
-                "bootstrap_on_grid_%dsamples_%s-dist_%s-metafeatures.txt" %
-                (samples, measure, instance))
-            with open(bootstrap_on_grid_file, "a") as fh:
-                for command in bootstrap_commands:
-                    command = "%s --METALEARNING:metafeatures_subset %s " \
-                             "--METALEARNING:distance_measure %s " \
-                             "--METALEARNING:num_bootstrap_examples " \
-                             "%d --SPEARMINT:method_args num_startup_jobs=%d\n"\
-                             % (command, instance, measure, samples, samples)
+for fold in range(3):
+    metalearning_commands[fold].sort()
+    for instance in instantiations:
+        for measure in distance_measures:
+            metal_on_grid_file = os.path.join(experiments_directory,
+                "metal_on_grid_%s-distance_%s-features_testfold%d.txt" %
+                    (measure, instance, fold))
+            with open(metal_on_grid_file, "a") as fh:
+                for command in metalearning_commands[fold]:
+                    command = "%s --METALEARNING:distance_measure %s  " \
+                             "--METALEARNING:metafeatures_subset %s " \
+                             "--HPOLIB:experiment_directory_prefix " \
+                             "%s_%s\n" % \
+                             (command, measure, instance, measure, instance)
                     fh.write(command)
                 test_commands.append(command)
+
+
+
+
+bootstrap_samples = (2, 5, 10)
+for fold in range(3):
+    bootstrap_commands[fold].sort()
+    for instance in instantiations:
+        for measure in distance_measures:
+            for samples in bootstrap_samples:
+                bootstrap_on_grid_file = os.path.join(experiments_directory,
+                    "bootstrap_on_grid_%dsamples_%s-dist_%s-metafeatures_testfold%d.txt" %
+                    (samples, measure, instance, fold))
+                with open(bootstrap_on_grid_file, "a") as fh:
+                    for command in bootstrap_commands[fold]:
+                        command = "%s --METALEARNING:metafeatures_subset %s " \
+                                 "--METALEARNING:distance_measure %s " \
+                                 "--METALEARNING:num_bootstrap_examples " \
+                                 "%d --SPEARMINT:method_args " \
+                                 "num_startup_jobs=%d " \
+                                 "--HPOLIB:experiment_directory_prefix  " \
+                                 "bootstrapped%d_%s_%s\n"\
+                                 % (command, instance, measure, samples,
+                                    samples, samples, measure, instance)
+                        fh.write(command)
+                    test_commands.append(command)
 
 # Also write a file with test commands - one command per kind of configuration
 test_commands_file = os.path.join(experiments_directory, "test_commands.txt")

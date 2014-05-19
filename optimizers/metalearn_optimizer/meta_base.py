@@ -69,7 +69,8 @@ class MetaBase(object):
         if not np.isfinite(df.values).all():
             logger.warn(df)
             logger.warn(metafeature_subset)
-            raise ValueError("Metafeatures contain non-finite values.")
+            raise ValueError("Metafeatures for dataset %s contain non-finite "
+                             "values." % dataset_name)
         return df
 
     def get_all_metadata_as_pandas(self, subset_indices=None,

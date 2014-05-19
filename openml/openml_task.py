@@ -61,8 +61,11 @@ class OpenMLTask(object):
         X, Y = dataset.get_npy(target=self.target_feature.lower())
         return X, Y
 
-    def get_train_and_test_set(self, X=None, Y=None, test_fold=None):
+    def get_train_and_test_splits(self,X=None, Y=None, test_fold=None):
+        loaded_dataset = False
+
         if X is None and Y is None:
+            loaded_dataset = True
             # TODO: at some point get the split from OpenML
             X, Y = self.get_dataset()
             rs = np.random.RandomState(42)
@@ -79,6 +82,14 @@ class OpenMLTask(object):
         print "Tests folds", test_fold, test_folds
 
         split = self._get_fold(X, Y, fold=test_fold, folds=test_folds)
+        if loaded_dataset:
+            return X, Y, split
+        else:
+            return split
+
+    def get_train_and_test_set(self, X=None, Y=None, test_fold=None):
+        X, Y, split = self.get_train_and_test_splits(X, Y, test_fold)
+
         X_train = X[split[0]]
         X_test = X[split[1]]
         Y_train = Y[split[0]]

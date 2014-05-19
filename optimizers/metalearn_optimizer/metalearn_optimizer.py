@@ -50,7 +50,7 @@ def restore(config, optimizer_dir, **kwargs):
 
 
 #noinspection PyUnusedLocal
-def main(config, options, experiment_dir, **kwargs):
+def main(config, options, experiment_dir, experiment_directory_prefix, **kwargs):
     # config:           Loaded .cfg file
     # options:          Options containing seed, restore_dir,
     # experiment_dir:   Experiment directory/Benchmark_directory
@@ -64,7 +64,9 @@ def main(config, options, experiment_dir, **kwargs):
     if options.restore:
         raise NotImplementedError()
     else:
-        optimizer_dir = os.path.join(experiment_dir, "metalearn_optimizer_" +
+        optimizer_dir = os.path.join(experiment_dir,
+                                     experiment_directory_prefix
+                                     + "metalearn_optimizer_" +
                                      str(options.seed) + "_" +
                                      time_string)
 

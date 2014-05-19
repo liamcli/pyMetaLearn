@@ -67,11 +67,13 @@ to_use = list()
 # 172 has wrong target + too less data
 # 173, 174 have too less target examples of target classes other than zero
 # 175, 176 have the wrong class attribute
+# 179, 180 take too long
+# 184 takes too long
 # 185 has an index
 # 187 does not exist
 for r in [range(2, 17), (18,), range(20, 25), range(26, 27), range(28, 38), \
         range(39, 45), range(48, 52), range(53, 57), range(58, 63), (171,),
-        range(179, 185), (186,), (188,)]:
+        range(181, 183), (186,), (188,)]:
     to_use.extend(r)
 
 print "Datasets which will be used", to_use
