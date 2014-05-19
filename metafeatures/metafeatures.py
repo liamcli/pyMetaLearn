@@ -1,6 +1,7 @@
 from collections import defaultdict
 from collections import OrderedDict
 import numpy as np
+import sys
 
 import scipy.stats
 from scipy.linalg import LinAlgError
@@ -8,6 +9,8 @@ from scipy.linalg import LinAlgError
 import sklearn
 import sklearn.metrics
 import sklearn.cross_validation
+
+import scipy.stats
 
 import time
 
@@ -155,28 +158,6 @@ def inverse_dataset_ratio(X, Y):
 def log_inverse_dataset_ratio(X, Y):
     return np.log(metafeatures["inverse_dataset_ratio"](X, Y))
 
-"""
-@metafeatures.define("nominal_min(")
-def nominal_min(X, Y):
-    pass
-
-@metafeatures.define("nominal_max")
-def nominal_max(X, Y):
-    pass
-
-@metafeatures.define("nominal_mean")
-def nominal_mean(X, Y):
-    pass
-
-@metafeatures.define("nominal_std")
-def nominal_std(X, Y):
-    pass
-
-@metafeatures.define("nominal_sum")
-def nominal_sum(X, Y):
-    pass
-"""
-
 @metafeatures.define("class_probability_min")
 def class_probability_min(X, Y):
     occurence_dict = defaultdict(float)
@@ -219,6 +200,195 @@ def class_probability_std(X, Y):
     return (occurences / Y.size).std()
 
 ################################################################################
+# Reif, A Comprehensive Dataset for Evaluating Approaches of various Meta-Learning Tasks
+# defines these five metafeatures as simple metafeatures, but they could also
+#  be the counterpart for the skewness and kurtosis of the numerical features
+@metafeatures.define("symbols_min")
+def symbols_min(X, Y):
+    # The minimum can only be zero if there are no nominal features,
+    # otherwise it is at least one
+    # TODO: shouldn't this rather be two?
+    minimum = sys.maxint
+    for column in X.iteritems():
+        if column[1].dtype == 'object':
+            unique = column[1].nunique()
+            if unique > 0 and unique < minimum:
+                minimum = unique
+    return minimum if minimum < sys.maxint else 0
+
+@metafeatures.define("symbols_max")
+def symbols_max(X, Y):
+    maximum = 0
+    for column in X.iteritems():
+        if column[1].dtype == 'object':
+            unique = column[1].nunique()
+            maximum = max(unique, maximum)
+    return maximum
+
+@metafeatures.define("symbols_mean")
+def symbols_mean(X, Y):
+    uniques = []
+    for column in X.iteritems():
+        if column[1].dtype == 'object':
+            unique = column[1].nunique()
+            if unique > 0:
+                uniques.append(unique)
+    mean = np.nanmean(uniques)
+    return mean if np.isfinite(mean) else 0
+
+@metafeatures.define("symbols_std")
+def symbols_std(X, Y):
+    uniques = []
+    for column in X.iteritems():
+        if column[1].dtype == 'object':
+            unique = column[1].nunique()
+            if unique > 0:
+                uniques.append(unique)
+    std = np.nanstd(uniques)
+    return std if np.isfinite(std) else 0
+
+@metafeatures.define("symbols_sum")
+def symbols_sum(X, Y):
+    uniques = []
+    for column in X.iteritems():
+        if column[1].dtype == 'object':
+            unique = column[1].nunique()
+            if unique > 0:
+                uniques.append(unique)
+    sum = np.nansum(uniques)
+    return sum if np.isfinite(sum) else 0
+
+################################################################################
+# Statistical meta features
+# Only use third and fourth statistical moment because it is common to
+# standardize for the other two
+# see Engels & Theusinger, 1998 - Using a Data Metric for Preprocessing Advice for Data Mining Applications.
+
+@metafeatures.define("kurtosis_min")
+def kurtosis_min(X, Y):
+    # The minimum can only be zero if there are no nominal features,
+    # otherwise it is at least one
+    # TODO: shouldn't this rather be two?
+    kurts = []
+    for column in X.iteritems():
+        if column[1].dtype == np.float64:
+            kurts.append(scipy.stats.kurtosis(column[1].values))
+            # kurts.append(column[1].kurt())
+    minimum = np.nanmin(kurts) if len(kurts) > 0 else 0
+    return minimum if np.isfinite(minimum) else 0
+
+@metafeatures.define("kurtosis_max")
+def kurtosis_max(X, Y):
+    kurts = []
+    for column in X.iteritems():
+        if column[1].dtype == np.float64:
+            kurts.append(scipy.stats.kurtosis(column[1].values))
+            # kurts.append(column[1].kurt())
+    maximum = np.nanmax(kurts) if len(kurts) > 0 else 0
+    return maximum if np.isfinite(maximum) else 0
+
+@metafeatures.define("kurtosis_mean")
+def kurtosis_mean(X, Y):
+    kurts = []
+    for column in X.iteritems():
+        if column[1].dtype == np.float64:
+            kurts.append(scipy.stats.kurtosis(column[1].values))
+            # .append(column[1].kurt())
+    mean = np.nanmean(kurts) if len(kurts) > 0 else 0
+    return mean if np.isfinite(mean) else 0
+
+@metafeatures.define("kurtosis_std")
+def kurtosis_std(X, Y):
+    kurts = []
+    for column in X.iteritems():
+        if column[1].dtype == np.float64:
+            kurts.append(scipy.stats.kurtosis(column[1].values))
+            # kurts.append(column[1].kurt())
+    std = np.nanstd(kurts) if len(kurts) > 0 else 0
+    return std if np.isfinite(std) else 0
+
+@metafeatures.define("skewness_min")
+def skewness_min(X, Y):
+    # The minimum can only be zero if there are no nominal features,
+    # otherwise it is at least one
+    # TODO: shouldn't this rather be two?
+    skews = []
+    for column in X.iteritems():
+        if column[1].dtype == np.float64:
+            skews.append(scipy.stats.skew(column[1].values))
+            # skews.append(column[1].skew())
+    minimum = np.nanmin(skews) if len(skews) > 0 else 0
+    return minimum if np.isfinite(minimum) else 0
+
+@metafeatures.define("skewness_max")
+def skewness_max(X, Y):
+    skews = []
+    for column in X.iteritems():
+        if column[1].dtype == np.float64:
+            skews.append(scipy.stats.skew(column[1].values))
+            # skews.append(column[1].skew())
+    maximum = np.nanmax(skews) if len(skews) > 0 else 0
+    return maximum if np.isfinite(maximum) else 0
+
+@metafeatures.define("skewness_mean")
+def skewness_mean(X, Y):
+    skews = []
+    for column in X.iteritems():
+        if column[1].dtype == np.float64:
+            skews.append(scipy.stats.skew(column[1].values))
+            #skews.append(column[1].skew())
+    mean = np.nanmean(skews) if len(skews) > 0 else 0
+    return mean if np.isfinite(mean) else 0
+
+@metafeatures.define("skewness_std")
+def skewness_std(X, Y):
+    skews = []
+    for column in X.iteritems():
+        if column[1].dtype == np.float64:
+            skews.append(scipy.stats.skew(column[1].values))
+            #skews.append(column[1].skew())
+    std = np.nanstd(skews) if len(skews) > 0 else 0
+    return std if np.isfinite(std) else 0
+
+#@metafeatures.define("cancor1")
+#def cancor1(X, Y):
+#    pass
+
+#@metafeatures.define("cancor2")
+#def cancor2(X, Y):
+#    pass
+
+################################################################################
+# Information-theoretic metafeatures
+@metafeatures.define("class_entropy")
+def class_entroy(X, Y):
+    occurence_dict = defaultdict(float)
+    for value in Y.values:
+        occurence_dict[value] += 1
+    return scipy.stats.entropy([occurence_dict[key] for key in
+                                occurence_dict], base=2)
+
+#@metafeatures.define("normalized_class_entropy")
+
+#@metafeatures.define("attribute_entropy")
+
+#@metafeatures.define("normalized_attribute_entropy")
+
+#@metafeatures.define("joint_entropy")
+
+#@metafeatures.define("mutual_information")
+
+#@metafeatures.define("noise-signal-ratio")
+
+#@metafeatures.define("signal-noise-ratio")
+
+#@metafeatures.define("equivalent_number_of_attributes")
+
+#@metafeatures.define("conditional_entropy")
+
+#@metafeatures.define("average_attribute_entropy")
+
+################################################################################
 # Landmarking features, computed with cross validation
 # These should be invoked with the same transformations of X and Y with which
 # sklearn will be called later on
@@ -239,6 +409,9 @@ def landmark_lda(X, Y):
         return 1 - (accuracy / 10)
     except scipy.linalg.LinAlgError as e:
         print "!!!", e, "Returned 1 instead!"
+        return 1
+    except ValueError as e:
+        print "!!!", e, "Returned 1 instead"
         return 1
 
 # Naive Bayes

@@ -1,4 +1,5 @@
 from unittest import TestCase
+import unittest
 import os
 
 import numpy as np
@@ -128,6 +129,71 @@ class TestMetaFeatures(TestCase):
         self.assertAlmostEqual(mf, prob_std)
         self.assertIsInstance(mf, float)
 
+    def test_symbols_min(self):
+        mf = self.mf["symbols_min"](self.X, self.Y)
+        self.assertEqual(mf, 1)
+
+    def test_symbols_max(self):
+        # this is attribute steel
+        mf = self.mf["symbols_max"](self.X, self.Y)
+        self.assertEqual(mf, 7)
+
+    def test_symbols_mean(self):
+        mf = self.mf["symbols_mean"](self.X, self.Y)
+        # Empty looking spaces denote empty attributes
+        symbol_frequency = [2, 1, 7, 1, 2, 4, 1, 1, 4, 2, 1, 1, 1, 2, 1, #
+                            1, 1, 1,   1, 1,    3, 1,           2, 2, 3, 2]
+        self.assertAlmostEqual(mf, np.mean(symbol_frequency))
+
+    def test_symbols_std(self):
+        mf = self.mf["symbols_std"](self.X, self.Y)
+        symbol_frequency = [2, 1, 7, 1, 2, 4, 1, 1, 4, 2, 1, 1, 1, 2, 1, #
+                            1, 1, 1,   1, 1,    3, 1,           2, 2, 3, 2]
+        self.assertAlmostEqual(mf, np.std(symbol_frequency))
+
+    def test_symbols_sum(self):
+        mf = self.mf["symbols_sum"](self.X, self.Y)
+        self.assertEqual(mf, 49)
+
+    def test_kurtosis_min(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["kurtosis_min"](self.X, self.Y)
+
+    def test_kurtosis_max(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["kurtosis_max"](self.X, self.Y)
+
+    def test_kurtosis_mean(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["kurtosis_mean"](self.X, self.Y)
+
+    def test_kurtosis_std(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["kurtosis_std"](self.X, self.Y)
+
+    def test_skewness_min(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["skewness_min"](self.X, self.Y)
+
+    def test_skewness_max(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["skewness_max"](self.X, self.Y)
+
+    def test_skewness_mean(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["skewness_mean"](self.X, self.Y)
+
+    def test_skewness_std(self):
+        # TODO: somehow compute the expected output?
+        mf = self.mf["skewness_std"](self.X, self.Y)
+
+    def test_class_entropy(self):
+        mf = self.mf["class_entropy"](self.X, self.Y)
+        classes = np.array((8, 99, 684, 67, 40), dtype=np.float64)
+        classes = classes / sum(classes)
+        entropy = -np.sum([c * np.log2(c) for c in classes])
+        self.assertAlmostEqual(mf, entropy)
+
     def test_landmark_lda(self):
         # TODO: somehow compute the expected output?
         mf = self.mf["landmark_lda"](self.Xnp, self.Ynp)
@@ -148,6 +214,7 @@ class TestMetaFeatures(TestCase):
         # TODO: somehow compute the expected output?
         mf = self.mf["landmark_random_node_learner"](self.Xnp, self.Ynp)
 
+    @unittest.skip("Currently not implemented!")
     def test_worst_node(self):
         # TODO: somehow compute the expected output?
         mf = self.mf["landmark_worst_node_learner"](self.Xnp, self.Ynp)
