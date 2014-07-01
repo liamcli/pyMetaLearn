@@ -41,7 +41,7 @@ class OpenMLDataset(Dataset):
         pass
 
     def get_pandas(self, target=None):
-        # TODO: add target to the path
+        # TODO: add target to the filename
         x_path = os.path.join(self.openMLBasePath(), "datasets", "did%d_x.df"
                                                                  % self._id)
         y_path = os.path.join(self.openMLBasePath(), "datasets", "did%d_y.df"
@@ -62,7 +62,7 @@ class OpenMLDataset(Dataset):
         return x, y
 
     def get_npy(self, target=None, replace_missing_with=0, scaling=None):
-        # TODO: add target to the path
+        # TODO: add target to the filename
         x_path = os.path.join(self.openMLBasePath(), "datasets", "did%d_x.npy"
                                                                  % self._id)
         y_path = os.path.join(self.openMLBasePath(), "datasets", "did%d_y.npy"

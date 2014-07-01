@@ -13,6 +13,27 @@ import pyMetaLearn.optimizers.metalearn_optimizer.metalearner as metalearner
 import pyMetaLearn.metafeatures.metafeatures as mf
 
 
+def create_regression_dataset(metafeatures, experiments):
+    X = []
+    X_indices = []
+    Y = []
+    for dataset_name in experiments:
+        experiment = experiments[dataset_name]
+        mf = metafeatures.loc[dataset_name]
+        for i, run in enumerate(experiment):
+            x1 = pd.Series(data=[run.params[param] for param in run.params],
+                           index=run.params.keys())
+            x2 = mf
+            X.append(x1.append(x2))
+            X_indices.append('%s_%d' % (dataset_name, i))
+            Y.append(run.result)
+    X = pd.DataFrame(X, index=X_indices)
+    Y = pd.DataFrame(Y, index=X_indices)
+    print X.shape
+    print Y.shape
+    return X, Y
+
+
 def create_predict_spearman_rank(metafeatures, experiments, iterator):
     X = []
     Y = []
@@ -266,9 +287,9 @@ if __name__ == "__main__":
     # performed...
     context = metalearner.setup(None)
     metafeatures = context["metafeatures"]
-    cv_metafeatures = context["cv_metafeatures"]
+    #cv_metafeatures = context["cv_metafeatures"]
     meta_base = context["meta_base"]
-    cv_meta_base = context["cv_meta_base"]
+    #cv_meta_base = context["cv_meta_base"]
 
     savefile_prefix = "testfold_%d-%d" % (context["test_fold"],
                                           context["test_folds"])
@@ -298,7 +319,7 @@ if __name__ == "__main__":
     # Experiment is an OrderedDict, which has dataset names as keys
     # The values are lists of experiments(OrderedDict of params, response)
     experiments = meta_base.experiments
-    cv_experiments = cv_meta_base.experiments
+    #cv_experiments = cv_meta_base.experiments
 
     """
     # Build the warmstart directory for SMAC, can be called with
@@ -328,7 +349,11 @@ if __name__ == "__main__":
     # with the adjustment of Yogotama and Mann
 
     """
+    X, Y = create_regression_dataset(metafeatures, experiments)
+    with open("regression_dataset.pkl", "w") as fh:
+        cPickle.dump((X, Y, metafeatures), fh, -1)
 
+    """
     # Calculate the metafeatures without the 10fold CV
     X, Y = create_predict_spearman_rank(metafeatures, experiments,
                                         iterator="permutation")
@@ -362,7 +387,7 @@ if __name__ == "__main__":
         savefile_prefix + "_spearman_rank_cv_perm.pkl")
     with open(spearman_rank_file, "w") as fh:
         cPickle.dump((X, Y, metafeatures), fh, -1)
-
+    """
 
 
 

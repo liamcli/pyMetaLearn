@@ -64,9 +64,12 @@ def fold_evaluate(params, fold=0, folds=1):
                            kernel="rbf", random_state=random_state)
 
     config = wrapping_util.load_experiment_config_file()
-    pyMetaLearn.openml.manage_openml_data.set_local_directory(config.get(
-        "EXPERIMENT", "openml_data_dir"))
+    openml_data_dir = config.get("EXPERIMENT", "openml_data_dir")
+    pyMetaLearn.openml.manage_openml_data.set_local_directory(openml_data_dir)
     task_args_pkl = config.get("EXPERIMENT", "task_args_pkl")
+    # Support both absolute and relative paths
+    task_args_pkl = os.path.join(openml_data_dir, task_args_pkl)
+
     with open(task_args_pkl) as fh:
         task_args = cPickle.load(fh)
 

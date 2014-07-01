@@ -11,6 +11,7 @@ import functools
 import os
 import numpy as np
 import scipy.stats
+import sklearn.metrics
 import sys
 import time
 
@@ -118,9 +119,11 @@ def create_predict_spearman_rank(metafeatures, experiments, iterator):
     return X, Y
 
 
-def setup(args):
+def setup(args, config=None):
     context = dict()
-    config = wrapping_util.load_experiment_config_file()
+    if config is None:
+        config = wrapping_util.load_experiment_config_file()
+    context["config"] = config
     test_fold = config.getint("EXPERIMENT", "test_fold")
     test_folds = config.getint("EXPERIMENT", "test_folds")
     context["seed"] = config.getint("HPOLIB", "seed")
@@ -337,7 +340,7 @@ def calculate_distances(dataset_metafeatures, metafeatures, distance_fn,
     assert np.isfinite(dataset_metafeatures.values).all()
 
     for idx, candidate_metafeatures in metafeatures.iterrows():
-        logger.info(candidate_metafeatures.name)
+        # logger.info(candidate_metafeatures.name)
         dist = distance_fn(dataset_metafeatures, candidate_metafeatures, context)
         dist_tuple = (dist, candidate_metafeatures.name)
         distances.append(dist_tuple)
@@ -436,11 +439,20 @@ def metalearn_base(context):
         # TODO: instead of a random forest, the user could provide a generic
         # import call with which it is possible to import a class which
         # implements the sklearn fit and predict function...
-        cfg = wrapping_util.load_experiment_config_file()
-        rf_params = cfg.get("METALEARNING", "distance_rf_params")
+        cfg = context['config']
+        rf_params = cfg.get("METALEARNING", "distance_learner_params")
         eliminate = cfg.get("METALEARNING", "distance_eliminate_features")
+        logger.warn("Going to remove the following features %s",
+                    str(eliminate))
         eliminate = ast.literal_eval(eliminate)
         experiments= meta_base.experiments
+
+        rf_params = ast.literal_eval(rf_params)
+        rf_params["seed"] = context["seed"]
+        rf_params["oob_score"] = True
+        if not rf_params:
+            rf_params = {}
+        rf = learn_distances.get_rf(**rf_params)
 
         X, Y = create_predict_spearman_rank(
             metafeatures, experiments, "permutation")
@@ -448,12 +460,11 @@ def metalearn_base(context):
         keep = [col for col in X.columns if col not in eliminate]
         X_subset = X.loc[:,keep]
 
-        rf_params = ast.literal_eval(rf_params)
-        rf_params["seed"] = context["seed"]
-        if not rf_params:
-            rf_params = {}
-        rf = learn_distances.get_rf(**rf_params)
         rf.fit(X_subset.values, Y.values)
+
+        logger.info("RF-OOB MAE %f" % sklearn.metrics.mean_absolute_error(rf.oob_prediction_, Y))
+        logger.info("RF-OOB MSE %f" % sklearn.metrics.mean_squared_error(rf.oob_prediction_, Y))
+        logger.info("OOB-score %f" % rf.oob_score_)
         context["learned_distance"] = rf
 
     distance_fn = getattr(sys.modules[__name__], context["distance_measure"])

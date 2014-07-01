@@ -234,7 +234,7 @@ instantiations = {"all": "--METALEARNING:metafeatures_subset all",
                   "yogotama_2014": "--METALEARNING:metafeatures_subset yogotama_2014",
                   "bardenet_2013_boost": "--METALEARNING:metafeatures_subset bardenet_2013_boost",
                   "bardenet_2013_nn": "--METALEARNING:metafeatures_subset bardenet_2013_nn",}
-distance_measures = ["l1", "l2"]
+distance_measures = ["l1", "l2", "learned_distance"]
 
 for fold in range(3):
     metalearning_commands[fold].sort()
@@ -248,13 +248,10 @@ for fold in range(3):
                     command = "%s --METALEARNING:distance_measure %s  " \
                              "--METALEARNING:metafeatures_subset %s " \
                              "--HPOLIB:experiment_directory_prefix " \
-                             "%s_%s\n" % \
+                             "metalearning_%s_%s\n" % \
                              (command, measure, instance, measure, instance)
                     fh.write(command)
                 test_commands.append(command)
-
-
-
 
 bootstrap_samples = (2, 5, 10)
 for fold in range(3):

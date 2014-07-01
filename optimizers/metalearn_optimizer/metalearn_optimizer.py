@@ -73,12 +73,13 @@ def main(config, options, experiment_dir, experiment_directory_prefix, **kwargs)
     # Build call
     cmd += build_metalearn_call(config, options, optimizer_dir)
 
+
     # Set up experiment directory
     if not os.path.exists(optimizer_dir):
         os.mkdir(optimizer_dir)
-        params = config.get('METALEARNING', 'params')
-        if not os.path.exists(os.path.join(optimizer_dir, params)):
-            os.symlink(os.path.join(experiment_dir, "metalearner", params),
-                os.path.join(optimizer_dir, params))
+    #    params = config.get('METALEARNING', 'params')
+    #    if not os.path.exists(os.path.join(optimizer_dir, params)):
+    #        os.symlink(os.path.join(experiment_dir, "metalearner", params),
+    #            os.path.join(optimizer_dir, params))
 
     return cmd, optimizer_dir

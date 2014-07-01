@@ -1,0 +1,11 @@
+0.74/1.04	['/home/feurerm/thesis/Software/pyMetaLearn/optimizers/metalearn_optimizer/learn_distances.py', '--input_file', '/home/feurerm/thesis/experiments/2014_04_25_predict_distances/testfold_0-3_spearman_rank_cv_perm.pkl', '--fold', '0', '--folds', '1', '--params', '-max_features', '0.706750631048', '-min_samples_leaf', '6', '-min_samples_split', '6', '-n_estimators', '30', '-n_jobs', '4', '-seed', '66']
+1.51/1.89	Metafeatures (57, 46)
+1.51/1.89	X (287280, 92)
+1.51/1.89	Y (287280,)
+1.51/1.89	Dataset Mae MSE Rho
+1103.65/299.66	vehicle 0.31649837205 0.137126153282 0.400498800139
+2259.51/609.19	anneal.ORIG 0.243248704086 0.0818928087742 0.59304050464
+3375.64/918.70	segment 0.150768511647 0.0345941220659 0.846649277473
+4509.15/1246.02	pendigits 0.336182196561 0.141696594638 0.409917444203
+5618.56/1547.37	mushroom 0.147674607916 0.0322833331061 0.667577828483
+6741.33/1871.69	labor 0.317668279612 0.14251701833 0.268069928378

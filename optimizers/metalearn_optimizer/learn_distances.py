@@ -28,9 +28,9 @@ def split_for_loo(X, Y, dataset_name):
             train.append(cross)
 
     X_train = X.loc[train].values
-    Y_train = Y.loc[train].values
+    Y_train = Y.loc[train].values.reshape((-1,))
     X_valid = X.loc[valid].values
-    Y_valid = Y.loc[valid].values
+    Y_valid = Y.loc[valid].values.reshape((-1,))
     # print X_train.shape, Y_train.shape, X_valid.shape, Y_valid.shape
     return X_train, Y_train, X_valid, Y_valid
 
@@ -52,7 +52,7 @@ def validate_model_without_one_dataset(X, Y, model, dataset_name):
 
 
 def get_rf(n_estimators=10, max_features=1.0, min_samples_split=2,
-           min_samples_leaf=1, n_jobs=2, seed=42):
+           min_samples_leaf=1, n_jobs=2, seed=42, oob_score=False):
     rs = sklearn.utils.check_random_state(int(seed))
     rf = sklearn.ensemble.RandomForestRegressor(n_estimators=int(n_estimators),
                                                 max_features=float(max_features),
@@ -60,6 +60,7 @@ def get_rf(n_estimators=10, max_features=1.0, min_samples_split=2,
                                                 min_samples_leaf=int(min_samples_leaf),
                                                 criterion="mse",
                                                 random_state=rs,
+                                                oob_score=oob_score,
                                                 n_jobs=int(n_jobs))
     return rf
 

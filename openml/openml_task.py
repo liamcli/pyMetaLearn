@@ -97,6 +97,8 @@ class OpenMLTask(object):
 
         return (X_train, X_test, Y_train, Y_test)
 
+    # TODO: add a method to cache the train and test splits
+
     def evaluate(self, algo):
         """Evaluate an algorithm on the test data.
         """

@@ -25,6 +25,12 @@ def main(params, **kwargs):
                 raise ValueError("Results and instance_results must be valid "
                                  "numbers.")
 
+        # convert everything to a string since the params which we receive
+        # are strings, too
+        trial_params = trial["params"]
+        for key in trial_params:
+            trial_params[key] = str(trial_params[key])
+
         parameters = str(OrderedDict(sorted(trial["params"].items(),
                                         key=lambda t: t[0])))
         if folds > 1:
@@ -34,10 +40,12 @@ def main(params, **kwargs):
             ground_truth[parameters] = trial["result"]
             measured_times[parameters] = trial["duration"]
 
+
     params_hack = dict()
     for key in params:
         params_hack["-" + key] = params[key]
     params = str(OrderedDict(sorted(params_hack.items(), key=lambda t: t[0])))
+    print params
     print ground_truth
     y = ground_truth[params]
 

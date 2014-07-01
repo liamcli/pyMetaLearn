@@ -20,19 +20,29 @@ Exceptions are
 """
 from collections import OrderedDict
 
-
+import numpy as np
+import sklearn.metrics
+import sklearn.utils
+import sklearn.svm
+import sklearn.preprocessing
+import sklearn.ensemble
 import skdata
 import skdata.base
 from skdata.base import Task
+import time
+import types
 
 # TODO: add PIL to dependencies
+print skdata
 import skdata.cifar10
 import skdata.iris
-import skdata.kaggle_facial_expression
+#import skdata.kaggle_facial_expression
+import skdata.larochelle_etal_2007
+print skdata.larochelle_etal_2007
 import skdata.larochelle_etal_2007.dataset
 import skdata.larochelle_etal_2007.view
 import skdata.mnist
-import skdata.pubfig.dataset
+#import skdata.pubfig.dataset
 import skdata.svhn
 import skdata.brodatz
 import skdata.caltech
@@ -99,7 +109,7 @@ tasks = OrderedDict()
 datasets["cifar10"] = skdata.cifar10.dataset.CIFAR10
 tasks["cifar10"] = skdata.cifar10.views.OfficialVectorClassificationTask
 
-"""
+
 datasets["larochelle_etal_2007_MNIST_BackgroundImages"] = \
     skdata.larochelle_etal_2007.dataset.MNIST_BackgroundImages
 tasks["larochelle_etal_2007_MNIST_BackgroundImages"] = \
@@ -191,11 +201,12 @@ tasks["larochelle_etal_2007_Convex"] = \
 tasks["larochelle_etal_2007_Convex"].prepare = \
     types.MethodType(prepare, None, tasks["larochelle_etal_2007_Convex"])
 
-datasets["mnist"] = skdata.mnist.dataset.MNIST
-tasks["mnist"] = skdata.mnist.view.OfficialVectorClassification
-tasks["mnist"].prepare = \
-    types.MethodType(prepare_indexed_vector_classification, None, tasks["mnist"])
-"""
+#datasets["mnist"] = skdata.mnist.dataset.MNIST
+#tasks["mnist"] = skdata.mnist.view.OfficialVectorClassification
+#tasks["mnist"].prepare = \
+#    types.MethodType(prepare_indexed_vector_classification, None,
+# tasks["mnist"])
+
 
 # SVHN has too many dimensions
 # datasets["svhn"] = skdata.svhn.dataset.CroppedDigits
@@ -240,7 +251,7 @@ def show_remote_datasets():
 def show_only_remote_datasets():
     pass
 
-"""
+
 for dataset in reversed(datasets):
     print "###"
     print dataset
@@ -257,16 +268,38 @@ for dataset in reversed(datasets):
     if hasattr(task, "prepare"):
         task.prepare()
 
-    starttime = time.time()
+    if dataset == "mnist":
+        task.train.x = np.array(task.train.x.reshape((-1, 784)), dtype=np.float32)
+        task.test.x = np.array(task.test.x.reshape((-1, 784)), dtype=np.float32)
 
+    if task.train.x.dtype != np.float32:
+        print task.train.x, type(task.train.x), task.train.x.dtype
+        raise Exception
+
+    starttime = time.time()
     random_state = sklearn.utils.check_random_state(42)
-    fn = sklearn.svm.SVC(cache_size=1000, random_state=random_state)
-    #fn = RandomForest.RandomForestClassifier(n_estimators=100,
-    #    criterion="entropy", n_jobs=1, random_state=random_state)
-    fn.fit(task.train.x, task.train.y)
-    prediction = fn.predict(task.test.x)
-    print sklearn.metrics.accuracy_score(task.test.y, prediction)
+    fn = sklearn.ensemble.RandomForestClassifier(random_state=random_state)
+    scaler = sklearn.preprocessing.MinMaxScaler(copy=True).fit(task.train.x)
+    x_train = task.train.x.copy()
+    x_test = task.test.x.copy()
+    x_train = scaler.transform(x_train)
+    x_test = scaler.transform(x_test)
+    fn.fit(x_train, task.train.y)
+    prediction = fn.predict(x_test)
+    print "RF", sklearn.metrics.accuracy_score(task.test.y, prediction)
+    print time.time() - starttime
+
+    starttime = time.time()
+    random_state = sklearn.utils.check_random_state(42)
+    fn = sklearn.svm.SVC(cache_size=2000, random_state=random_state)
+    scaler = sklearn.preprocessing.MinMaxScaler(copy=True).fit(task.train.x)
+    x_train = task.train.x.copy()
+    x_test = task.test.x.copy()
+    x_train = scaler.transform(x_train)
+    x_test = scaler.transform(x_test)
+    fn.fit(x_train, task.train.y)
+    prediction = fn.predict(x_test)
+    print "SVM", sklearn.metrics.accuracy_score(task.test.y, prediction)
     print time.time() - starttime
 
     del task
-"""
