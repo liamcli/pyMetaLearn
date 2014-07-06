@@ -1,0 +1,11 @@
+algo = /global/home/cwthornt/software/jre/bin/java -Xmx3024m -cp /home/cwthornt/autoweka/build/classes:/home/cwthornt/autoweka/lib/weka.jar autoweka.smac.SMACWrapper -prop datasetString=zipFile=/global/home/cwthornt/autoweka/classification/convex.zip\\:type=zipFile:instanceGenerator=autoweka.instancegenerators.TerminationHoldout:resultMetric=errorRate -wrapper
+execdir = ./
+deterministic = 1
+run_obj = quality
+overall_obj = mean
+cutoff_time = 9000
+tunerTimeout = 108000
+outdir = out
+paramfile = autoweka.params
+instance_file = autoweka.instances
+test_instance_file = autoweka.test.instances
