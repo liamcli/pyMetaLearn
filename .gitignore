@@ -52,3 +52,6 @@ nosetests.xml
 # Others
 coverage_html
 *~
+.nfs*
+*.ipynb_checkpoints
+htmlcov
