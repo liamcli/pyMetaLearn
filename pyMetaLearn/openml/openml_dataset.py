@@ -2,6 +2,7 @@ __author__ = 'feurerm'
 
 import cPickle
 from collections import OrderedDict, defaultdict
+import gzip
 import lockfile
 import os
 import time
@@ -36,9 +37,6 @@ class OpenMLDataset(Dataset):
         return cls("OpenML", dic["oml:id"], dic["oml:name"], dic["oml:version"],
             dic["oml:description"], dic["oml:format"], dic["oml:url"],
             dic["oml:md5_checksum"], dataset_dir, None)
-
-    def calculate_metadata(self):
-        pass
 
     def get_pandas(self, target=None):
         # TODO: add target to the filename
@@ -95,8 +93,13 @@ class OpenMLDataset(Dataset):
     def get_unprocessed_files(self):
         output_path = self.get_arff_filename()
         print output_path
-        if not os.path.exists(output_path):
+        if os.path.exists(output_path):
+            pass
+        elif os.path.exists(output_path + ".gz"):
+            output_path += ".gz"
+        elif not os.path.exists(output_path):
             print "Download file"
+            output_path += ".gz"
             self._fetch_dataset(output_path)
 
         # A random number after which we consider a file for too large on a
@@ -106,17 +109,21 @@ class OpenMLDataset(Dataset):
         if bits != 64 and os.path.getsize(output_path) > 120000000:
             return NotImplementedError("File too big")
 
-        fh = open(output_path)
-        arff_object = arff.load(fh)
-        fh.close()
+        if output_path[-3:] == ".gz":
+            with gzip.open(output_path) as fh:
+                arff_object = arff.load(fh)
+        else:
+            with open(output_path) as fh:
+                arff_object = arff.load(fh)
         return arff_object
 
     def _fetch_dataset(self, output_path):
         arff_string = self._read_url(self._url)
+        if output_path[-3:] != ".gz":
+            output_path += ".gz"
 
-        fh = open(output_path, "w")
-        fh.write(arff_string)
-        fh.close()
+        with gzip.open(output_path, "w") as fh:
+            fh.write(arff_string)
         del arff_string
 
     def _prepare_dataset(self, arff, target=None):
@@ -263,7 +270,6 @@ class OpenMLDataset(Dataset):
 
         return dataset_array, Y
 
-
     def _parse_nominal(self, row):
         # This few lines perform a OneHotEncoding, where missing
         # values represented by none of the attributes being active (
@@ -286,7 +292,6 @@ class OpenMLDataset(Dataset):
                 array[row_idx][encoding[row[row_idx]]] = 1
 
         return array
-
 
     def normalize_scaling(self, array):
         # Apply scaling here so that if we are setting missing values
@@ -327,7 +332,6 @@ class OpenMLDataset(Dataset):
 
         return fixed_array
 
-
     def encode_labels(self, row):
         discrete_values = set(row)
         discrete_values.discard(None)
@@ -339,7 +343,6 @@ class OpenMLDataset(Dataset):
             encoding[possible_value] = row_idx
         return encoding
 
-
     def render_as_html(self, file_handle):
         x, y = self.get_pandas()
         html_table = x.to_html(float_format=lambda x: '%10f' % x,
@@ -349,7 +352,6 @@ class OpenMLDataset(Dataset):
     def render_as_csv(self, file_handle):
         x, y = self.get_pandas()
         x.to_csv(file_handle)
-
 
     def get_metafeatures(self, split_file_name=None, return_times=None):
         # Want a file because this enforces that the splits are actually
@@ -433,9 +435,6 @@ class OpenMLDataset(Dataset):
                 metafeatures_by_fold[metafeature[2]][metafeature[0]] = metafeature[4]
             for metafeature in metafeatures['data']:
                 times_by_fold[metafeatures[2]][metafeature[0]] = metafeature[5]
-
-
-
 
     def _read_url(self, url):
         return pyMetaLearn.openml.manage_openml_data._read_url(url)

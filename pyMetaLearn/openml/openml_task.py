@@ -1,6 +1,8 @@
 import sys
 import numpy as np
 
+import arff
+
 import pyMetaLearn.openml.manage_openml_data
 
 import sklearn.metrics
@@ -9,7 +11,8 @@ from sklearn.cross_validation import StratifiedKFold
 class OpenMLTask(object):
     def __init__(self, task_id, task_type, data_set_id, target_feature,
                  estimation_procudure_type, data_splits_url,
-                 estimation_parameters, evaluation_measure):
+                 estimation_parameters, evaluation_measure,
+                 local_validation_split_file, local_test_split_file):
         # General
         self.task_id = task_id
         self.task_type = task_type
@@ -24,6 +27,8 @@ class OpenMLTask(object):
         # the evaluation procedure 3foldtest/10foldvalid is not available
         self.estimation_procedure["data_splits_url"] = data_splits_url
         self.estimation_procedure["parameters"] = estimation_parameters
+        self.estimation_procedure["local_test_split_file"] = local_test_split_file
+        self.estimation_procedure["local_validation_split_file"] = local_validation_split_file
         # Evaluation Measure
         self.evaluation_measure = evaluation_measure
         # Predictions
@@ -57,7 +62,7 @@ class OpenMLTask(object):
                    inputs["estimation_procedure"]["oml:estimation_procedure"][
                        "oml:data_splits_url"], estimation_parameters,
                    inputs["evaluation_measures"]["oml:evaluation_measures"][
-                       "oml:evaluation_measure"])
+                       "oml:evaluation_measure"], None, None)
 
     def __str__(self):
         return "OpenMLTask instance.\nTask ID: %s\n" \
@@ -77,43 +82,6 @@ class OpenMLTask(object):
             self.dataset_id)
         X, Y = dataset.get_npy(target=self.target_feature.lower())
         return X, Y
-
-    def get_train_and_test_splits(self, X=None, Y=None, test_fold=None):
-        loaded_dataset = False
-
-        if X is None and Y is None:
-            loaded_dataset = True
-            # TODO: at some point get the split from OpenML
-            X, Y = self.get_dataset()
-            rs = np.random.RandomState(42)
-            indices = np.arange(X.shape[0])
-            rs.shuffle(indices)
-            X = X[indices]
-            Y = Y[indices]
-        elif X is None or Y is None:
-            raise NotImplementedError()
-
-        test_folds = self.estimation_procedure["parameters"]["test_folds"]
-        if test_fold is None:
-            test_fold = self.estimation_procedure["parameters"]["test_fold"]
-
-        split = self._get_fold(X, Y, fold=test_fold, folds=test_folds)
-        if loaded_dataset:
-            return X, Y, split
-        else:
-            return split
-
-    def get_train_and_test_set(self, X=None, Y=None, test_fold=None):
-        X, Y, split = self.get_train_and_test_splits(X, Y, test_fold)
-
-        X_train = X[split[0]]
-        X_test = X[split[1]]
-        Y_train = Y[split[0]]
-        Y_test = Y[split[1]]
-
-        return (X_train, X_test, Y_train, Y_test)
-
-    # TODO: add a method to cache the train and test splits
 
     def evaluate(self, algo):
         """Evaluate an algorithm on the test data.
@@ -146,31 +114,45 @@ class OpenMLTask(object):
 
         ########################################################################
         # Test folds
-        X_train, X_test, Y_train, Y_test = self.get_train_and_test_set()
+        with open(self.estimation_procedure["local_validation_split_file"]) \
+                as fh:
+            test_splits = arff.load(fh)
 
         ########################################################################
         # Crossvalidation folds
-        train_mask, valid_mask = self._get_fold(X_train, Y_train, fold, folds)
-        data = dict()
-        data["train_X"] = X_train[train_mask]
-        data["train_Y"] = Y_train[train_mask]
-        data["valid_X"] = X_train[valid_mask]
-        data["valid_Y"] = Y_train[valid_mask]
-        data["test_X"] = X_test
-        data["test_Y"] = Y_test
+        with open(self.estimation_procedure["local_test_split_file"]) as fh:
+            validation_splits = arff.load(fh)
 
-        algo.fit(data["train_X"], data["train_Y"])
+        train_indices = []
+        validation_indices = []
+        for line in validation_splits['data']:
+            if line[3] != fold:
+                continue
+            elif line[0] == 'TRAIN':
+                train_indices.append(line[1])
+            elif line[0] == 'TEST':
+                validation_indices.append(line[1])
+            else:
+                raise ValueError()
 
-        predictions = algo.predict(data["valid_X"])
-        accuracy = sklearn.metrics.accuracy_score(data["valid_Y"], predictions)
+        train_indices = np.array(train_indices)
+        validation_indices = np.array(validation_indices)
+        X, Y = self.get_dataset()
+
+        algo.fit(X[train_indices], Y[train_indices])
+
+        predictions = algo.predict(X[validation_indices])
+        accuracy = sklearn.metrics.accuracy_score(Y[validation_indices], predictions)
         return accuracy
-
 
     def _get_fold(self, X, Y, fold, folds):
         fold = int(fold)
         folds = int(folds)
         if fold >= folds:
             raise ValueError((fold, folds))
+        if X.shape[0] != Y.shape[0]:
+            raise ValueError("The first dimension of the X and Y array must "
+                             "be equal.")
         # do stratified cross validation, like OpenML does according to the MySQL
         # dump.
         # print fold, "/", folds

@@ -1,13 +1,11 @@
 from collections import defaultdict
 import cPickle
-import numpy as np
 import os
 
 import pyMetaLearn.openml.manage_openml_data
 from pyMetaLearn.openml.openml_dataset import OpenMLDataset
 from pyMetaLearn.openml.openml_task import OpenMLTask
 
-import sklearn.ensemble
 
 pyMetaLearn.openml.manage_openml_data.set_local_directory(
     "/home/feurerm/thesis/datasets/openml/")
@@ -107,16 +105,3 @@ for did in to_use:
 
     with open(task_file, "w") as fh:
         cPickle.dump(task_properties, fh)
-
-    """
-    task = OpenMLTask(**task_properties)
-
-    random_state = sklearn.utils.check_random_state(42)
-    algo = sklearn.ensemble.RandomForestClassifier(n_jobs=4, random_state=random_state)
-    vals = []
-    print "DID", did,
-    for i in range(10):
-        vals.append(1. - task.perform_cv_fold(algo, 0, 10))
-    print np.mean(vals)
-    """
-
