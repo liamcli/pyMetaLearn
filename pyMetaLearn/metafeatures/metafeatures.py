@@ -482,13 +482,13 @@ def landmark_lda(X, Y):
             lda.fit(X[train], Y[train])
             predictions = lda.predict(X[test])
             accuracy += sklearn.metrics.accuracy_score(predictions, Y[test])
-        return 1 - (accuracy / 10)
+        return accuracy / 10
     except scipy.linalg.LinAlgError as e:
         logging.warning("LDA failed: %s Returned 1 instead!" % e)
         return 1
     except ValueError as e:
         logging.warning("LDA failed: %s Returned 1 instead!" % e)
-        return 1
+        return 0
 
 # Naive Bayes
 @metafeatures.define("landmark_naive_bayes")
@@ -501,7 +501,7 @@ def landmark_naive_bayes(X, Y):
         nb.fit(X[train], Y[train])
         predictions = nb.predict(X[test])
         accuracy += sklearn.metrics.accuracy_score(predictions, Y[test])
-    return 1 - (accuracy / 10)
+    return accuracy / 10
 
 # Cart learner instead of C5.0
 @metafeatures.define("landmark_decision_tree")
@@ -515,7 +515,7 @@ def landmark_decision_tree(X, Y):
         tree.fit(X[train], Y[train])
         predictions = tree.predict(X[test])
         accuracy += sklearn.metrics.accuracy_score(predictions, Y[test])
-    return 1 - (accuracy / 10)
+    return accuracy / 10
 
 """If there is a dataset which has OneHotEncoded features it can happend that
 a node learner splits at one of the attribute encodings. This should be fine
@@ -536,7 +536,7 @@ def landmark_decision_node_learner(X, Y):
         node.fit(X[train], Y[train])
         predictions = node.predict(X[test])
         accuracy += sklearn.metrics.accuracy_score(predictions, Y[test])
-    return 1 - (accuracy / 10)
+    return accuracy / 10
 
 @metafeatures.define("landmark_random_node_learner")
 def landmark_random_node_learner(X, Y):
@@ -554,7 +554,7 @@ def landmark_random_node_learner(X, Y):
         node.fit(X[train][:,attribute_idx].reshape((-1, 1)), Y[train])
         predictions = node.predict(X[test][:,attribute_idx].reshape((-1, 1)))
         accuracy += sklearn.metrics.accuracy_score(predictions, Y[test])
-    return 1 - (accuracy / 10)
+    return accuracy / 10
 
 """
 This is wrong...
@@ -592,7 +592,7 @@ def landmark_1NN(X, Y):
         lda.fit(X[train], Y[train])
         predictions = lda.predict(X[test])
         accuracy += sklearn.metrics.accuracy_score(predictions, Y[test])
-    return 1 - (accuracy / 10)
+    return accuracy / 10
 
 ################################################################################
 # Bardenet 2013 - Collaborative Hyperparameter Tuning
@@ -682,7 +682,7 @@ def calculate_all_metafeatures(dataset, subset_indices=None,
             Ypd = Ypd.iloc[subset_indices]
 
         # This is not only important for datasets which are somehow
-        # sorted in a strange way, but also provents lda from failing in
+        # sorted in a strange way, but also prevents lda from failing in
         # some cases...
         rs = np.random.RandomState(42)
         indices = np.arange(Xnpy.shape[0])
@@ -719,6 +719,7 @@ def calculate_all_metafeatures(dataset, subset_indices=None,
                 continue
             elif is_helper_function and not helper_functions.is_calculated(
                     dependency):
+                logging.info("Starting to calculate dependency %s", name)
                 dependency_start_time = time.time()
                 value = helper_functions[dependency](X, Y)
                 endtime = time.time()
@@ -729,6 +730,7 @@ def calculate_all_metafeatures(dataset, subset_indices=None,
                     endtime - dependency_start_time)
                 times[dependency] = endtime - dependency_start_time
 
+        logging.info("Starting to calculate %s...", name)
         starttime = time.time()
         value = metafeatures[name](X, Y)
         endtime = time.time()
