@@ -46,7 +46,7 @@ def create_predict_spearman_rank(metafeatures, experiments, iterator):
         for cross in itertools.permutations(dataset_names, r=2):
             cross_product.append(cross)
     else:
-        raise NotImplementedError()
+        raise NotImplementedError(iterator)
     logging.info("Create spearman rank dataset without CV data and %s",
                 iterator)
     logging.info("Using %d datasets", len(dataset_names))

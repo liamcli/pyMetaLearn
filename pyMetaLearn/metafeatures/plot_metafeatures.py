@@ -15,11 +15,14 @@ from sklearn.decomposition import PCA
 try:
     from sklearn.manifold import TSNE
     from sklearn.metrics.pairwise import PAIRWISE_DISTANCE_FUNCTIONS
+    import sklearn.metrics.pairwise
 except:
     print "Failed to load TSNE, probably you're using sklearn 0.14.X"
 import StringIO
 
 from pyMetaLearn.metalearning.meta_base import MetaBase
+from pyMetaLearn.metafeatures.metafeatures import subsets
+import pyMetaLearn.metalearning.create_datasets
 import pyMetaLearn.openml.manage_openml_data
 
 
@@ -38,7 +41,7 @@ def load_dataset(dataset, dataset_directory):
 
 
 def plot_metafeatures(metafeatures_plot_dir, metafeatures, runs,
-                      method='pca', seed=1, depth=1):
+                      method='pca', seed=1, depth=1, distance='l2'):
     """Project datasets in a 2d space and plot them.
 
     arguments:
@@ -66,15 +69,45 @@ def plot_metafeatures(metafeatures_plot_dir, metafeatures, runs,
         transformation = pca.fit_transform(metafeatures.values)
 
     elif method == 't-sne':
+        if distance == 'l2':
+            distance_matrix = sklearn.metrics.pairwise.pairwise_distances(
+                metafeatures.values, metric='l2')
+        elif distance == 'l1':
+            distance_matrix = sklearn.metrics.pairwise.pairwise_distances(
+                metafeatures.values, metric='l1')
+        elif distance == 'runs':
+            names_to_indices = dict()
+            for metafeature in metafeatures.index:
+                idx = len(names_to_indices)
+                names_to_indices[metafeature] = idx
+
+            X, Y = pyMetaLearn.metalearning.create_datasets\
+                .create_predict_spearman_rank(metafeatures, runs,
+                                              'combination')
+            # Make a distance matrix out of Y
+            distance_matrix = np.zeros((metafeatures.shape[0],
+                                        metafeatures.shape[0]), dtype=np.float64)
+
+            for idx in Y.index:
+                dataset_names = idx.split("_")
+                d1 = names_to_indices[dataset_names[0]]
+                d2 = names_to_indices[dataset_names[1]]
+                distance_matrix[d1][d2] = Y.loc[idx]
+                distance_matrix[d2][d1] = Y.loc[idx]
+
+        else:
+            raise NotImplementedError()
+
         # For whatever reason, tsne doesn't accept l1 distance
         tsne = TSNE(random_state=seed, perplexity=50, verbose=1)
-        transformation = tsne.fit_transform(metafeatures.values)
+        transformation = tsne.fit_transform(distance_matrix)
 
     # Transform the transformation back to range [0, 1] to ease plotting
     transformation_min = np.nanmin(transformation, axis=0)
     transformation_max = np.nanmax(transformation, axis=0)
     transformation = (transformation - transformation_min) / \
                      (transformation_max - transformation_min)
+    print transformation_min, transformation_max
 
     #for i, dataset in enumerate(directory_content):
     #    print dataset, meta_feature_array[i]
@@ -256,7 +289,7 @@ def plot_metafeatures(metafeatures_plot_dir, metafeatures, runs,
         # computing performed in the second iteration
         def swap(label_positions, marker_positions, depth=0,
                  maxdepth=maxdepth, best_found=sys.maxint):
-            if len(label_positions) == 0:
+            if len(label_positions) <= 1:
                 return
 
             two_step_look_ahead = False
@@ -282,6 +315,9 @@ def plot_metafeatures(metafeatures_plot_dir, metafeatures, runs,
                         tmp = label_positions[key1]
                         label_positions[key1] = label_positions[key2]
                         label_positions[key2] = tmp
+
+                    if after == 0:
+                        break
 
                 # If it is not yet sorted perfectly, do another pass with
                 # two-step lookahead
@@ -351,13 +387,13 @@ def plot_metafeatures(metafeatures_plot_dir, metafeatures, runs,
     plt.clf()
 
     # Relation of features to each other...
-    correlations = []
-    for mf_1, mf_2 in itertools.combinations(metafeatures.columns, 2):
+    #correlations = []
+    #for mf_1, mf_2 in itertools.combinations(metafeatures.columns, 2):
 
-        x = metafeatures.loc[:, mf_1]
-        y = metafeatures.loc[:, mf_2]
-        rho, p = scipy.stats.spearmanr(x, y)
-        correlations.append((rho, "%s-%s" % (mf_1, mf_2)))
+    #    x = metafeatures.loc[:, mf_1]
+    #    y = metafeatures.loc[:, mf_2]
+    #    rho, p = scipy.stats.spearmanr(x, y)
+    #    correlations.append((rho, "%s-%s" % (mf_1, mf_2)))
 
         # plt.figure()
         # plt.plot(np.arange(0, 1, 0.01), np.arange(0, 1, 0.01))
@@ -370,7 +406,7 @@ def plot_metafeatures(metafeatures_plot_dir, metafeatures, runs,
         # .png"))
         # plt.close()
 
-    correlations.sort()
+    #correlations.sort()
     #for cor in correlations:
         #print cor
 
@@ -378,28 +414,38 @@ def plot_metafeatures(metafeatures_plot_dir, metafeatures, runs,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--tasks", required=True, type=str)
-    # parser.add_argument("--runs", required=True, type=str)
+    parser.add_argument("--runs", type=str)
     parser.add_argument("experiment_directory", type=str)
     parser.add_argument("-m", "--method", default='pca',
                         choices=['pca', 't-sne'],
                         help="Dimensionality reduction method")
+    parser.add_argument("--distance", choices=[None, 'l1', 'l2', 'runs'],
+                        default='l2')
     parser.add_argument("-s", "--seed", default=1, type=int)
     parser.add_argument("-d", "--depth", default=0, type=int)
+    parser.add_argument("--subset", default='all', choices=['all', 'pfahringer_2000_experiment1'])
     args = parser.parse_args()
 
     with open(args.tasks) as fh:
         task_files_list = fh.readlines()
-    # with open(args.runs) as fh:
-    #     experiments_file_list = fh.readlines()
-    experiments_file_list = StringIO.StringIO()
-    for i in range(len(task_files_list)):
-        experiments_file_list.write("\n")
-    experiments_file_list.seek(0)
+    # Load all the experiment run data only if needed
+    if args.distance == 'runs':
+        with open(args.runs) as fh:
+            experiments_file_list = fh.readlines()
+    else:
+        experiments_file_list = StringIO.StringIO()
+        for i in range(len(task_files_list)):
+            experiments_file_list.write("\n")
+        experiments_file_list.seek(0)
 
     pyMetaLearn.openml.manage_openml_data.set_local_directory(
         args.experiment_directory)
     meta_base = MetaBase(task_files_list, experiments_file_list)
     metafeatures = meta_base.get_all_train_metafeatures_as_pandas()
+
+    if args.subset:
+        metafeatures = metafeatures.loc[:,subsets[args.subset]]
+
     runs = meta_base.get_all_runs()
 
     general_plot_directory = os.path.join(args.experiment_directory, "plots")
@@ -414,6 +460,7 @@ if __name__ == "__main__":
         pass
 
     plot_metafeatures(metafeatures_plot_dir, metafeatures, runs,
-                      method=args.method, seed=args.seed, depth=args.depth)
+                      method=args.method, seed=args.seed, depth=args.depth,
+                      distance=args.distance)
 
 
