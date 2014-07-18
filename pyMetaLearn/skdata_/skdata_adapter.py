@@ -402,11 +402,10 @@ def convert_dataset_to_openml_dataset(name):
         X, Y = ds.get_npy(target='class', scaling='scaling')
         for fold in range(10):
             valid_train_split, valid_test_split = \
-                t._get_fold(X[train_indices], Y[train_indices], fold=fold, folds=10)
-            tmp = [('TRAIN',idx,0,fold) for idx in valid_train_split]
-            valid_splits['data'].extend(tmp)
-            offset = len(tmp)
-            valid_splits['data'].extend([('TEST',offset+idx,0,fold) for idx in valid_test_split])
+                t._get_fold(X[train_indices], Y[train_indices],
+                            fold=fold, folds=10, shuffle=True)
+            valid_splits['data'].extend([('TRAIN',idx,0,fold) for idx in valid_train_split])
+            valid_splits['data'].extend([('TEST',idx,0,fold) for idx in valid_test_split])
         with open(cv_split_file, "w") as fh:
             arff.dump(valid_splits, fh)
         del valid_splits

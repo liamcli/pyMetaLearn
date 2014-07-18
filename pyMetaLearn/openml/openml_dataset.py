@@ -353,7 +353,11 @@ class OpenMLDataset(Dataset):
         x, y = self.get_pandas()
         x.to_csv(file_handle)
 
-    def get_metafeatures(self, split_file_name=None, return_times=None):
+    def get_metafeatures(self, split_file_name=None, return_times=None,
+                         return_helper_functions=False):
+        if return_helper_functions:
+            raise NotImplementedError()
+
         # Want a file because this enforces that the splits are actually
         # saved somewhere
         # Bad implementation of metafeature caching...
@@ -422,9 +426,9 @@ class OpenMLDataset(Dataset):
         # TODO: adapt for folds!
         if len(splits_per_fold) == 1 and splits_per_fold.keys()[0] == 0:
             metafeatures_dict =  dict([(line[0], line[4]) for line
-                                       in metafeatures['data']])
+                in metafeatures['data'] if line[1] == 'METAFEATURE'])
             times_dict = dict([(line[0], line[5]) for line
-                                       in metafeatures['data']])
+                in metafeatures['data'] if line[1] == 'METAFEATURE'])
             if return_times:
                 return metafeatures_dict, times_dict
             return metafeatures_dict
@@ -432,9 +436,14 @@ class OpenMLDataset(Dataset):
             metafeatures_by_fold = defaultdict(dict)
             times_by_fold = defaultdict(dict)
             for metafeature in metafeatures['data']:
+                if metafeature[1] != 'METAFEATURE': continue
                 metafeatures_by_fold[metafeature[2]][metafeature[0]] = metafeature[4]
             for metafeature in metafeatures['data']:
-                times_by_fold[metafeatures[2]][metafeature[0]] = metafeature[5]
+                if metafeature[1] != 'METAFEATURE': continue
+                times_by_fold[metafeature[2]][metafeature[0]] = metafeature[5]
+            if return_times:
+                return metafeatures_by_fold, times_by_fold
+            return metafeatures_by_fold
 
     def _read_url(self, url):
         return pyMetaLearn.openml.manage_openml_data._read_url(url)

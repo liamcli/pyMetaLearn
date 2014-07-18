@@ -3,7 +3,7 @@ import logging
 from itertools import product
 import functools
 
-import optimizer_base
+import pyMetaLearn.optimizers.optimizer_base as optimizer_base
 
 
 logging.basicConfig(format='[%(levelname)s] [%(asctime)s:%(name)s] %('

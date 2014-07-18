@@ -1,5 +1,6 @@
 import setuptools
 
+# TODO: add the constraints module because of the arrow alignment in the plots
 setuptools.setup(name="pyMetaLearn",
                  description="Metalearning utilities for python.",
                  version="0.1dev",

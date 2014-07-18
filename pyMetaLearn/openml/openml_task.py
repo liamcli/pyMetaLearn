@@ -1,9 +1,13 @@
+from collections import defaultdict
+import cPickle
+import os
 import sys
 import numpy as np
 
 import arff
 
 import pyMetaLearn.openml.manage_openml_data
+from pyMetaLearn.openml.openml_dataset import OpenMLDataset
 
 import sklearn.metrics
 from sklearn.cross_validation import StratifiedKFold
@@ -69,17 +73,29 @@ class OpenMLTask(object):
                "Task type: %s\nDataset id: %s"\
             % (self.task_id, self.task_type, self.dataset_id)
 
+    def _get_dataset(self):
+        # TODO: add the to_lower for the class everywhere its called
+        try:
+            dataset = pyMetaLearn.openml.manage_openml_data.get_local_dataset(
+                self.dataset_id)
+        except:
+            local_dir = pyMetaLearn.openml.manage_openml_data.get_local_directory()
+            dataset_dir = os.path.join(local_dir, "datasets")
+            dataset_file = os.path.join(dataset_dir, "did%d.pkl" % self.dataset_id)
+            with open(dataset_file) as fh:
+                dataset = OpenMLDataset(**cPickle.load(fh))
+
+        return dataset
+
     def get_dataset_as_pandas(self):
-        dataset = pyMetaLearn.openml.manage_openml_data.get_local_dataset(
-            self.dataset_id)
+        dataset = self._get_dataset()
         X, Y = dataset.get_pandas(target=self.target_feature.lower())
         return X, Y
 
     def get_dataset(self):
         # TODO: add possibility to add the scaling etc to the dataset
         # creation routine!
-        dataset = pyMetaLearn.openml.manage_openml_data.get_local_dataset(
-            self.dataset_id)
+        dataset = self._get_dataset()
         X, Y = dataset.get_npy(target=self.target_feature.lower())
         return X, Y
 
@@ -99,33 +115,42 @@ class OpenMLTask(object):
         # For being closer to OpenML one could also call evaluate and pass
         # everything else through kwargs.
         if self.task_type != "Supervised Classification":
-            raise NotImplementedError()
+            raise NotImplementedError(self.task_type)
 
         if self.estimation_procedure["type"] != \
-                "crossvalidation with crossvalidation holdout":
-            raise NotImplementedError()
+                "crossvalidation with holdout":
+            raise NotImplementedError(self.estimation_procedure["type"] )
 
         if self.estimation_procedure["parameters"]["stratified_sampling"] != \
                 'true':
-            raise NotImplementedError()
+            raise NotImplementedError(self.estimation_procedure["parameters"]["stratified_sampling"])
 
         if self.evaluation_measure != "predictive_accuracy":
-            raise NotImplementedError()
+            raise NotImplementedError(self.evaluation_measure)
 
         ########################################################################
         # Test folds
-        with open(self.estimation_procedure["local_validation_split_file"]) \
-                as fh:
-            test_splits = arff.load(fh)
+        train_indices, test_indices = self.get_train_test_split()
 
         ########################################################################
         # Crossvalidation folds
-        with open(self.estimation_procedure["local_test_split_file"]) as fh:
-            validation_splits = arff.load(fh)
+        train_indices, validation_indices = self.get_validation_split(fold)
+
+        X, Y = self.get_dataset()
+
+        algo.fit(X[train_indices], Y[train_indices])
+
+        predictions = algo.predict(X[validation_indices])
+        accuracy = sklearn.metrics.accuracy_score(Y[validation_indices], predictions)
+        return accuracy
+
+    def get_validation_split(self, fold):
+        with open(self.estimation_procedure["local_validation_split_file"]) as fh:
+            test_splits = arff.load(fh)
 
         train_indices = []
         validation_indices = []
-        for line in validation_splits['data']:
+        for line in test_splits['data']:
             if line[3] != fold:
                 continue
             elif line[0] == 'TRAIN':
@@ -137,15 +162,31 @@ class OpenMLTask(object):
 
         train_indices = np.array(train_indices)
         validation_indices = np.array(validation_indices)
-        X, Y = self.get_dataset()
 
-        algo.fit(X[train_indices], Y[train_indices])
+        return train_indices, validation_indices
 
-        predictions = algo.predict(X[validation_indices])
-        accuracy = sklearn.metrics.accuracy_score(Y[validation_indices], predictions)
-        return accuracy
+    def get_train_test_split(self):
+        with open(self.estimation_procedure["local_test_split_file"]) as fh:
+            validation_splits = arff.load(fh)
 
-    def _get_fold(self, X, Y, fold, folds):
+        train_indices = []
+        test_indices = []
+        for line in validation_splits['data']:
+            if line[3] != 0:
+                raise NotImplementedError()
+            elif line[0] == 'TRAIN':
+                train_indices.append(line[1])
+            elif line[0] == 'TEST':
+                test_indices.append(line[1])
+            else:
+                raise ValueError()
+
+        train_indices = np.array(train_indices)
+        test_indices = np.array(test_indices)
+
+        return train_indices, test_indices
+
+    def _get_fold(self, X, Y, fold, folds, shuffle=True):
         fold = int(fold)
         folds = int(folds)
         if fold >= folds:
@@ -153,10 +194,18 @@ class OpenMLTask(object):
         if X.shape[0] != Y.shape[0]:
             raise ValueError("The first dimension of the X and Y array must "
                              "be equal.")
-        # do stratified cross validation, like OpenML does according to the MySQL
-        # dump.
-        # print fold, "/", folds
+
+        if shuffle == True:
+            rs = np.random.RandomState(42)
+            indices = np.arange(X.shape[0])
+            rs.shuffle(indices)
+            Y = Y[indices]
+
         kf = StratifiedKFold(Y, n_folds=folds, indices=True)
         for idx, split in enumerate(kf):
             if idx == fold:
-                return split
+                break
+
+        if shuffle == True:
+            return indices[split[0]], indices[split[1]]
+        return split

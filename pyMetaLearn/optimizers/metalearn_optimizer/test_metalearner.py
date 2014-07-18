@@ -1,146 +1,151 @@
 from collections import OrderedDict
 import StringIO
 import numpy as np
+import os
 import unittest
 
 import pandas as pd
 
-import metalearner
+import pyMetaLearn.metalearning.meta_base
+data_dir = os.path.dirname(pyMetaLearn.metalearning.meta_base.__file__)
+data_dir = os.path.join(data_dir, 'test_meta_base_data')
+
+import pyMetaLearn.openml.manage_openml_data
+from pyMetaLearn.metalearning.meta_base import Run, MetaBase
+import pyMetaLearn.optimizers.metalearn_optimizer.metalearner as metalearner
 
 
 class MetaLearnerTest(unittest.TestCase):
-    def test_get_experiments_list(self):
+    def setUp(self):
+        self.anneal = pd.Series({"number_of_instances": 898., "number_of_classes": 5.,
+                            "number_of_features": 38.}, name="anneal")
+        self.krvskp = pd.Series({"number_of_instances": 3196., "number_of_classes":
+                            2., "number_of_features": 36.}, name="krvskp")
+        self.labor = pd.Series({"number_of_instances": 57., "number_of_classes":
+                           2., "number_of_features": 16.}, name="labor")
+        self.runs = {'anneal': [Run({'x': 0}, 0.1), Run({'x': 1}, 0.5), Run({'x': 2}, 0.7)],
+                'krvskp': [Run({'x': 0}, 0.5), Run({'x': 1}, 0.1), Run({'x': 2}, 0.7)],
+                'labor': [Run({'x': 0}, 0.5), Run({'x': 1}, 0.7), Run({'x': 2}, 0.1)]}
+
+        self.cwd = os.getcwd()
+        openml_dir = pyMetaLearn.openml.manage_openml_data.set_local_directory(
+            data_dir)
+        os.chdir(openml_dir)
+
+        task_file = os.path.join(openml_dir, 'tasks', 'did_2.pkl')
+        task_list = StringIO.StringIO()
+        task_list.write(os.path.join(openml_dir, 'tasks', 'did_2.pkl'))
+        task_list.write('\n')
+        task_list.write(os.path.join(openml_dir, 'tasks', 'did_3.pkl'))
+        task_list.write("\n")
+        task_list.write(os.path.join(openml_dir, 'tasks', 'did_4.pkl'))
+        task_list.write("\n")
+        task_list.seek(0)
         experiments_list = StringIO.StringIO()
+        experiments_list.write('\n')
         experiments_list.write(
-            "/home/feurerm/thesis/experiments/2014_03_12_metaexperiments"
-            "/did1_annealfold0/gridsearch_1_2014-2-24--20-3-30-871675"
-            "/gridserach.pkl /home/feurerm/thesis/experiments/2014_03_12_metaexperiments"
-            "/did1_annealfold1/gridsearch_1_2014-2-24--20-3-40-293595"
-            "/gridsearch.pkl\n")
+            os.path.join(openml_dir, 'base_runs', 'sequential_did_3.pkl'))
+        experiments_list.write('\n')
+        experiments_list.write(
+            os.path.join(openml_dir, 'base_runs', 'sequential_did_4.pkl'))
         experiments_list.write("\n")
-        experiments_list.write(
-            "/home/feurerm/thesis/experiments/2014_03_12_metaexperiments"
-            "/did1_annealfold2/gridsearch_1_2014-2-24--20-3-26-901017"
-            "/gridsearch.pkl\n")
         experiments_list.seek(0)
-        retval = metalearner.read_experiments_list(experiments_list)
-        self.assertEqual(len(retval), 3)
-        self.assertEqual(len(retval[0]), 2)
-        self.assertEqual(len(retval[1]), 0)
+
+        self.meta_optimizer = metalearner.MetaLearningOptimizer(task_file,
+            task_list, experiments_list, openml_dir)
+
+    def tearDown(self):
+        os.chdir(self.cwd)
+
+    def test_perform_sequential_optimization(self):
+        # TODO: this is only a smoke test!
+        def dummy_function(params):
+            return params
+        ret = self.meta_optimizer.perform_sequential_optimization(
+            target_algorithm=dummy_function, evaluation_budget=2)
+        self.assertEqual(type(ret), OrderedDict)
+        with self.assertRaises(StopIteration):
+            self.meta_optimizer.perform_sequential_optimization(dummy_function)
 
 
-    def test_read_experiment_pickle(self):
-        with open("gridsearch.pkl") as fh:
-            rundata = metalearner.read_experiment_pickle(fh)
-        self.assertEqual(len(rundata), 399)
-        self.assertTrue(all([isinstance(run, metalearner.Experiment) for run
-                             in rundata]))
+    def test_metalearning_suggest_all(self):
+        ret = self.meta_optimizer.metalearning_suggest_all()
+        self.assertEqual(2, len(ret))
+        self.assertEqual(OrderedDict([('-classifier', 'random_forest'),
+                                      ('-preprocessing', 'None'),
+                                      ('-random_forest:criterion', 'entropy'),
+                                      ('-random_forest:max_features', '5'),
+                                      ('-random_forest:min_samples_split', '0')]),
+                         ret[0])
+        # There is no test for exclude_double_configuration as it's not present
+        # in the test data
 
-    def test_l1(self):
-        a = np.array([0, 1, 2, 17], dtype=np.float64)
-        b = np.array([1, 3, 2, 3])
-        self.assertEqual(metalearner.l1(a, b), 17)
+    def test_metalearning_suggest(self):
+        ret = self.meta_optimizer.metalearning_suggest(list())
+        self.assertEqual(type(ret), OrderedDict)
+        self.assertEqual(OrderedDict([('-classifier', 'random_forest'),
+                                      ('-preprocessing', 'None'),
+                                      ('-random_forest:criterion', 'entropy'),
+                                      ('-random_forest:max_features', '5'),
+                                      ('-random_forest:min_samples_split', '0')]),
+                         ret)
+        ret2 = self.meta_optimizer.metalearning_suggest([Run(ret, 1)])
+        self.assertEqual(type(ret2), OrderedDict)
+        self.assertEqual(OrderedDict([('-classifier', 'libsvm_svc'),
+                                      ('-libsvm_svc:C', 0.03125),
+                                      ('-libsvm_svc:gamma', 3.0517578125e-05),
+                                      ('-preprocessing', 'None')]), ret2)
 
-    def test_l2(self):
-        a = np.array([0, 1, 2, 17], dtype=np.float64)
-        b = np.array([1, 3, 2, 3])
-        self.assertAlmostEqual(metalearner.l2(a, b), 14.177446879)
 
-    def test_vector_space_model(self):
-        a = pd.Series([14, 5, 0, 2], dtype=np.float64) # sum of squares = 225 = 15x15
-        sos_a = np.sqrt(sum([value**2 for value in a]))
-        a_norm = a / sos_a
-        b = pd.Series([4, 2, 1, 2], dtype=np.float64)  # sum of square = 25 = 5x5
-        sos_b = np.sqrt(sum([value**2 for value in b]))
-        b_norm = b / sos_b
-        dist = sum(a_norm * b_norm)
-        self.assertAlmostEqual(dist, metalearner.vector_space_model(a, b))
+    def test_learn(self):
+        # Test only some special cases which are probably not yet handled
+        # like the metafeatures to eliminate and the random forest
+        # hyperparameters
+        self.meta_optimizer._learn()
 
-    def test_rescale(self):
-        anneal = pd.Series({"number_of_instances": 898., "number_of_classes": 5.,
-                            "number_of_features": 38.}, name="anneal")
-        krvskp = pd.Series({"number_of_instances": 3196., "number_of_classes":
-                            2., "number_of_features": 36.}, name="kr-vs-kp")
-        labor = pd.Series({"number_of_instances": 57., "number_of_classes":
-                            2., "number_of_features": 16.}, name="labor")
-        data = pd.DataFrame([anneal, krvskp, labor])
-        data = metalearner.rescale(data)
-        from pandas.util.testing import assert_series_equal
-        # Series.equal does not work properly with floats...
-        assert_series_equal(data.ix[0],
-                            pd.Series({"number_of_instances": 0.267919719656,
-                                      "number_of_classes": 1,
-                                      "number_of_features": 1}))
+    def test_get_metafeatures(self):
+        metafeatures, all_other_metafeatures = \
+            self.meta_optimizer._get_metafeatures()
+        self.assertEqual(type(metafeatures), pd.Series)
+        self.assertEqual(type(all_other_metafeatures), pd.DataFrame)
+        self.assertEqual('anneal.ORIG', metafeatures.name)
+        self.assertLess(2, metafeatures.shape[0])
+        self.meta_optimizer.use_features = ['number_of_classes']
+        metafeatures, all_other_metafeatures = \
+            self.meta_optimizer._get_metafeatures()
+        self.assertGreater(2, metafeatures.shape[0])
 
-    def test_calculate_distances_vsp(self):
-        anneal = pd.Series({"number_of_instances": 898., "number_of_classes": 5.,
-                            "number_of_features": 38.}, name="anneal")
-        krvskp = pd.Series({"number_of_instances": 3196., "number_of_classes":
-                            2., "number_of_features": 36.}, name="kr-vs-kp")
-        labor = pd.Series({"number_of_instances": 57., "number_of_classes":
-                            2., "number_of_features": 16.}, name="labor")
-        distance_function = metalearner.vector_space_model
-        distances = metalearner.calculate_distances(anneal,
-                        pd.DataFrame([krvskp, labor]), distance_function)
-        self.assertEqual(distances[0][1], "labor")
-        self.assertAlmostEqual(distances[0][0], 0.97297137561942704)
-        self.assertEqual(distances[1][1], "kr-vs-kp")
-        self.assertAlmostEqual(distances[1][0], 0.99950650794593432)
 
-    def test_calculate_distances_l1(self):
-        anneal = pd.Series({"number_of_instances": 0.267920, "number_of_classes": 1., "number_of_features": 1.}, name="anneal")
-        krvskp = pd.Series({"number_of_instances": 1., "number_of_classes": 0., "number_of_features": 0.909091}, name="kr-vs-kp")
-        labor = pd.Series({"number_of_instances": 0., "number_of_classes": 0., "number_of_features": 0.}, name="labor")
-        distance_function = metalearner.l1
-        distances = metalearner.calculate_distances(anneal,
-                        pd.DataFrame([krvskp, labor]), distance_function)
-        self.assertEqual(distances[0][1], "kr-vs-kp")
-        self.assertAlmostEqual(distances[0][0], 1.822989)
-        self.assertEqual(distances[1][1], "labor")
-        self.assertAlmostEqual(distances[1][0], 2.2679200000000002)
+    def test_read_task_list(self):
+        task_list_file = StringIO.StringIO()
+        task_list_file.write('a\nb\nc\nd\n')
+        task_list_file.seek(0)
+        task_list = self.meta_optimizer.read_task_list(task_list_file)
+        self.assertEqual(4, len(task_list))
+
+        task_list_file = StringIO.StringIO()
+        task_list_file.write('a\n\nc\nd\n')
+        task_list_file.seek(0)
+        self.assertRaisesRegexp(ValueError, 'Blank lines in the task list are not supported.',
+                                self.meta_optimizer.read_task_list,
+                                task_list_file)
+
+    def test_read_experiments_list(self):
+        experiments_list_file = StringIO.StringIO()
+        experiments_list_file.write('a\nb\n\nc d\n')
+        experiments_list_file.seek(0)
+        experiments_list = self.meta_optimizer.read_experiments_list(
+            experiments_list_file)
+        self.assertEqual(4, len(experiments_list))
+        self.assertEqual(2, len(experiments_list[3]))
 
     def test_split_metafeature_array(self):
-        anneal = pd.Series({"number_of_instances": 898., "number_of_classes": 5.,
-                            "number_of_features": 38.}, name="anneal")
-        krvskp = pd.Series({"number_of_instances": 3196., "number_of_classes":
-                            2., "number_of_features": 36.}, name="kr-vs-kp")
-        labor = pd.Series({"number_of_instances": 57., "number_of_classes":
-                            2., "number_of_features": 16.}, name="labor")
-        metafeatures = pd.DataFrame([anneal, krvskp, labor])
-        ds_metafeatures, other_metafeatures = metalearner\
-            .split_metafeature_array("kr-vs-kp", metafeatures)
+        metafeatures = pd.DataFrame([self.anneal, self.krvskp, self.labor])
+
+        ds_metafeatures, other_metafeatures = self.meta_optimizer. \
+            _split_metafeature_array("krvskp", metafeatures)
         self.assertIsInstance(ds_metafeatures, pd.Series)
         self.assertEqual(len(other_metafeatures.index), 2)
-
-    def test_select_params(self):
-        best_hyperparameters = dict()
-        best_hyperparameters["kr-vs-kp"] = OrderedDict([("C", 1)])
-        best_hyperparameters["labor"] = OrderedDict([("C", 2)])
-        distances = [(0.1, "kr-vs-kp"), (0.2, "labor")]
-        exp1 = metalearner.Experiment(OrderedDict([("C", 1)]), 0.1)
-        exp2 = metalearner.Experiment(OrderedDict([("C", 2)]), 0.2)
-        params = metalearner.select_params(best_hyperparameters, distances, [])
-        self.assertEqual(params, OrderedDict([("C", 1)]))
-        params = metalearner.select_params(best_hyperparameters, distances, [exp1])
-        print params
-        self.assertEqual(params, OrderedDict([("C", 2)]))
-        params = metalearner.select_params(best_hyperparameters, distances, [exp2])
-        self.assertEqual(params, OrderedDict([("C", 1)]))
-        self.assertRaises(StopIteration, metalearner.select_params,
-            best_hyperparameters, distances, [exp1, exp2])
-
-    def test_find_best_hyperparams(self):
-        exp0 = metalearner.Experiment(OrderedDict([("C", 0)]), 0.2)
-        exp1 = metalearner.Experiment(OrderedDict([("C", 1)]), 0.5)
-        exp2 = metalearner.Experiment(OrderedDict([("C", 2)]), 0.3)
-        exp3 = metalearner.Experiment(OrderedDict([("C", 3)]), 0.1)
-        exp4 = metalearner.Experiment(OrderedDict([("C", 4)]), 0.15)
-        exp5 = metalearner.Experiment(OrderedDict([("C", 5)]), np.NaN)
-        exp6 = metalearner.Experiment(OrderedDict([("C", 6)]), np.Inf)
-        self.assertEqual(metalearner.find_best_hyperparams(
-            [exp0, exp1, exp2, exp3, exp4, exp5, exp6]), OrderedDict([("C", 3)]))
-        self.assertEqual(metalearner.find_best_hyperparams(
-            [exp6, exp5, exp4, exp3, exp2, exp1, exp0]), OrderedDict([("C", 3)]))
 
 
 if __name__ == "__main__":

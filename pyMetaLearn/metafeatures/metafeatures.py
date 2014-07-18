@@ -484,10 +484,10 @@ def landmark_lda(X, Y):
             accuracy += sklearn.metrics.accuracy_score(predictions, Y[test])
         return accuracy / 10
     except scipy.linalg.LinAlgError as e:
-        logging.warning("LDA failed: %s Returned 1 instead!" % e)
-        return 1
+        logging.warning("LDA failed: %s Returned 0 instead!" % e)
+        return 0
     except ValueError as e:
-        logging.warning("LDA failed: %s Returned 1 instead!" % e)
+        logging.warning("LDA failed: %s Returned 0 instead!" % e)
         return 0
 
 # Naive Bayes
@@ -664,41 +664,44 @@ def pca_skewness_first_pc(X, Y):
 
 def calculate_all_metafeatures(dataset, subset_indices=None,
         calculate=None, dont_calculate=None, return_times=None):
-    # TODO add lazy dataset loading in case there is nothing new to calculate
     helper_functions.clear()
     metafeatures.clear()
     mf = OrderedDict()
     times = OrderedDict()
     Xnpy = Ynpy = Xpd = Ypd = None
 
-    if Xnpy is None:
-        Xnpy, Ynpy = dataset.get_npy(scaling="scale")
-        Xpd, Ypd = dataset.get_pandas()
-
-        if subset_indices is not None:
-            Xnpy = Xnpy[subset_indices]
-            Ynpy = Ynpy[subset_indices]
-            Xpd = Xpd.iloc[subset_indices]
-            Ypd = Ypd.iloc[subset_indices]
-
-        # This is not only important for datasets which are somehow
-        # sorted in a strange way, but also prevents lda from failing in
-        # some cases...
-        rs = np.random.RandomState(42)
-        indices = np.arange(Xnpy.shape[0])
-        rs.shuffle(indices)
-        Xnpy = Xnpy[indices]
-        Ynpy = Ynpy[indices]
-
     visited = set()
     to_visit = deque()
     to_visit.extend(metafeatures)
     while len(to_visit) > 0:
+        dataset_just_loaded = False
         name = to_visit.pop()
         if calculate is not None and name not in calculate:
             continue
         if dont_calculate is not None and name in dont_calculate:
             continue
+
+        # Lazily load the dataset only if its needed
+        if Xnpy is None:
+            Xnpy, Ynpy = dataset.get_npy(scaling="scale")
+            Xpd, Ypd = dataset.get_pandas()
+            dataset_just_loaded = True
+
+        if dataset_just_loaded and subset_indices is not None:
+            Xnpy = Xnpy[subset_indices]
+            Ynpy = Ynpy[subset_indices]
+            Xpd = Xpd.iloc[subset_indices]
+            Ypd = Ypd.iloc[subset_indices]
+
+        if dataset_just_loaded:
+            # This is not only important for datasets which are somehow
+            # sorted in a strange way, but also prevents lda from failing in
+            # some cases...
+            rs = np.random.RandomState(42)
+            indices = np.arange(Xnpy.shape[0])
+            rs.shuffle(indices)
+            Xnpy = Xnpy[indices]
+            Ynpy = Ynpy[indices]
 
         if name in npy_metafeatures:
             X, Y = Xnpy, Ynpy

@@ -3,28 +3,28 @@ __author__ = 'feurerm'
 
 import unittest
 
-import pyMetaLearn.file_handling
-import pyMetaLearn.file_handling.testsuite
-import pyMetaLearn.metafeatures.test_meta_features
-import pyMetaLearn.openml
+
+from pyMetaLearn.metafeatures.test_meta_features import TestMetaFeatures
+from pyMetaLearn.metalearning.test_meta_base import MetaBaseTest
 import pyMetaLearn.openml.testsuite
-import pyMetaLearn.rundata
-import pyMetaLearn.rundata.testsuite
-import pyMetaLearn.skdata_
+from pyMetaLearn.optimizers.gridsearch.test_gridsearch import GridSearchTest
+from pyMetaLearn.optimizers.metalearn_optimizer.test_metalearner import MetaLearnerTest
+# SMAC warmstart
+# Spearmint warmstart
 import pyMetaLearn.skdata_.testsuite
-#import uci
-#import uci.testsuite
+import pyMetaLearn.smac_utils.testsuite
+import pyMetaLearn.workflows.test_workflow_openml_to_libsvm
 
 
 def suite():
     _suite = unittest.TestSuite()
-    _suite.addTest(pyMetaLearn.file_handling.testsuite.suite())
-    _suite.addTest(unittest.makeSuite(pyMetaLearn.metafeatures
-                                      .test_meta_features.TestMetaFeatures))
+    _suite.addTest(unittest.makeSuite(TestMetaFeatures))
+    _suite.addTest(unittest.makeSuite(MetaBaseTest))
     _suite.addTest(pyMetaLearn.openml.testsuite.suite())
-    _suite.addTest(pyMetaLearn.rundata.testsuite.suite())
+    _suite.addTest(unittest.makeSuite(GridSearchTest))
+    _suite.addTest(unittest.makeSuite(MetaLearnerTest))
     _suite.addTest(pyMetaLearn.skdata_.testsuite.suite())
-    #_suite.addTest(uci.testsuite.suite())
+
     return _suite
 
 

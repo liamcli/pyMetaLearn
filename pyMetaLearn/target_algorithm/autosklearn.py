@@ -77,9 +77,13 @@ def fold_evaluate(params, fold=0, folds=1):
         raise NotImplementedError()
 
     if Y.dtype in (float, np.float, np.float16, np.float32, np.float64):
-        raise ValueError("SVC is used for classification, the target "
-                         "values are float values which implies this is a "
-                         "regression task.")
+        if (np.abs(Y - Y.astype(np.int32)) < 0.00001).all():
+            pass
+        else:
+            print Y
+            raise ValueError("SVC is used for classification, the target "
+                             "values are float values which implies this is a "
+                             "regression task.")
     elif Y.dtype != np.int32:
         raise NotImplementedError(Y.dtype)
 

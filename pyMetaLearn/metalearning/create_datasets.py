@@ -1,16 +1,13 @@
 from argparse import ArgumentParser
 import cPickle
 import itertools
+import logging
 import numpy as np
 import os
 import pandas as pd
 import re
 import scipy.stats
 import StringIO
-
-
-import pyMetaLearn.optimizers.metalearn_optimizer.metalearner as metalearner
-import pyMetaLearn.metafeatures.metafeatures as mf
 
 
 def create_regression_dataset(metafeatures, experiments):
@@ -29,8 +26,8 @@ def create_regression_dataset(metafeatures, experiments):
             Y.append(run.result)
     X = pd.DataFrame(X, index=X_indices)
     Y = pd.DataFrame(Y, index=X_indices)
-    print X.shape
-    print Y.shape
+    logging.info("X.shape %s", X.shape)
+    logging.info("Y.shape %s", Y.shape)
     return X, Y
 
 
@@ -50,9 +47,10 @@ def create_predict_spearman_rank(metafeatures, experiments, iterator):
             cross_product.append(cross)
     else:
         raise NotImplementedError()
-    print "Create spearman rank dataset without CV data and %s" % iterator
-    print "Using %d datasets" % len(dataset_names)
-    print "This will results in %d training points" % len(cross_product)
+    logging.info("Create spearman rank dataset without CV data and %s",
+                iterator)
+    logging.info("Using %d datasets", len(dataset_names))
+    logging.info("This will results in %d training points", len(cross_product))
 
     # Create inputs and targets
     for cross in cross_product:
@@ -83,6 +81,7 @@ def create_predict_spearman_rank(metafeatures, experiments, iterator):
             responses_2[idx] = exp_2.result
 
         rho, p = scipy.stats.spearmanr(responses_1, responses_2)
+        #rho, p = scipy.stats.kendalltau(responses_1, responses_2)
         if not np.isfinite(rho):
             rho = 0
         Y.append(rho)
@@ -90,9 +89,9 @@ def create_predict_spearman_rank(metafeatures, experiments, iterator):
 
     X = pd.DataFrame(X)
     Y = pd.Series(Y, index=Y_names)
-    print "Metafeatures", metafeatures.shape
-    print "X", X.shape
-    print "Y", Y.shape
+    logging.info("Metafeatures", metafeatures.shape)
+    logging.info("X.shape %s", X.shape)
+    logging.info("Y.shape %s", Y.shape)
     assert X.shape == (len(cross_product), metafeatures.shape[1] * 2), \
         (X.shape, (len(cross), metafeatures.shape[1] * 2))
     assert Y.shape == (len(cross_product), )
@@ -128,12 +127,12 @@ def create_predict_spearman_rank_with_cv(cv_metafeatures, cv_experiments,
     else:
         raise NotImplementedError()
 
-    print "Create spearman rank dataset with CV data %s" % iterator
-    print "Using %d datasets" % len(dataset_names)
-    print "This will results in %d training points" % \
-        (len(cross_product) * len(folds_product))
-    print "Length of dataset crossproduct", len(cross_product)
-    print "Length of folds crossproduct", len(folds_product)
+    logging.info("Create spearman rank dataset with CV data %s", iterator)
+    logging.info("Using %d datasets", len(dataset_names))
+    logging.info("This will results in %d training points",
+        (len(cross_product) * len(folds_product)))
+    logging.info("Length of dataset crossproduct %s", len(cross_product))
+    logging.info("Length of folds crossproduct %s", len(folds_product))
 
     # Create inputs and targets
     for i, cross in enumerate(cross_product):
@@ -177,9 +176,9 @@ def create_predict_spearman_rank_with_cv(cv_metafeatures, cv_experiments,
 
     X = pd.DataFrame(X)
     Y = pd.Series(Y, index=Y_names)
-    print
-    print "X", type(X), X.shape
-    print "Y", type(Y), Y.shape
+    logging.info("CV_Metafeatures", cv_metafeatures.shape)
+    logging.info("X.shape %s", X.shape)
+    logging.info("Y.shape %s", Y.shape)
     # train sklearn regressor (tree) with 10fold CV
     indices = range(len(X))
     np_rs = np.random.RandomState(42)
@@ -188,6 +187,7 @@ def create_predict_spearman_rank_with_cv(cv_metafeatures, cv_experiments,
     Y = Y.iloc[indices]
     return X, Y
 
+"""
 def create_smac_warmstart_files(context, dataset, output_dir, num_warmstarts):
     runs_and_results = StringIO.StringIO()
     runs_and_results.write("Run Number,Run History Configuration ID,Instance ID,"
@@ -267,10 +267,12 @@ def create_smac_files_file(cv_metafeatures, cv_experiments, dataset,
         train_instances_file.seek(0)
         for line in train_instances_file:
             fh.write(line)
-
+"""
 
 
 if __name__ == "__main__":
+    pass
+    """
     # TODO: right now, this is only done for one split, namely the split of
     # the directory we're inside...
     # TODO: this only works in a directory, in which a metaexperiment was
@@ -320,7 +322,7 @@ if __name__ == "__main__":
     # The values are lists of experiments(OrderedDict of params, response)
     experiments = meta_base.experiments
     #cv_experiments = cv_meta_base.experiments
-
+    """
     """
     # Build the warmstart directory for SMAC, can be called with
     # ./smac --scenario-file <file> --seed 0 --warmstart <foldername>
@@ -349,9 +351,9 @@ if __name__ == "__main__":
     # with the adjustment of Yogotama and Mann
 
     """
-    X, Y = create_regression_dataset(metafeatures, experiments)
-    with open("regression_dataset.pkl", "w") as fh:
-        cPickle.dump((X, Y, metafeatures), fh, -1)
+    #X, Y = create_regression_dataset(metafeatures, experiments)
+    #with open("regression_dataset.pkl", "w") as fh:
+    #    cPickle.dump((X, Y, metafeatures), fh, -1)
 
     """
     # Calculate the metafeatures without the 10fold CV

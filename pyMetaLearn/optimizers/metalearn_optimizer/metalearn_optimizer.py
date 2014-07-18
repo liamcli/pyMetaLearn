@@ -19,6 +19,7 @@
 #!/usr/bin/env python
 
 import os
+import StringIO
 
 import HPOlib.cv as cv
 import HPOlib.wrapping_util as wrapping_util
@@ -32,12 +33,32 @@ def build_metalearn_call(config, options, optimizer_dir):
     if metalearner_file[:-4] == ".pyc":
         metalearner_file = metalearner_file[:-1]
 
-    call = 'python ' + metalearner_file
-    # call += ' --params ' + config.get('METALEARNING', 'params')
-    call += " --cli_target " + "'python " + cv_file + "'"
-    call += " --cwd " + optimizer_dir
-    call += " --number_of_jobs " + config.get("HPOLIB", "number_of_jobs")
-    return call
+    call = StringIO.StringIO()
+    call.write('python ' + metalearner_file)
+    call.write(' ' + config.get("EXPERIMENT", "task_args_pkl"))
+    call.write(' ' + config.get("METALEARNING", "tasks"))
+    call.write(' ' + config.get("METALEARNING", "experiments"))
+    call.write(' ' + config.get("EXPERIMENT", "openml_data_dir"))
+    call.write(" --distance_measure " + config.get('METALEARNING', 'distance_measure'))
+    if config.get('METALEARNING', 'distance_keep_features'):
+        call.write(' --distance_keep_features ' +
+                   config.get('METALEARNING', 'distance_keep_features'))
+    call.write(" --cli_target " + "'python " + cv_file + "'")
+    call.write(" --cwd " + optimizer_dir)
+    call.write(" --number_of_jobs " + config.get("HPOLIB", "number_of_jobs"))
+    call.write(" --seed " + config.get("HPOLIB", "seed"))
+
+
+    # seed = config.getint("HPOLIB", "seed")
+    # distance = config.get("METALEARNING", "distance_measure")
+    # openml_dir = config.get("EXPERIMENT", "openml_data_dir")
+    # rf_params = config.get("METALEARNING", "distance_learner_params")
+    # eliminate = config.get("METALEARNING", "distance_eliminate_features")
+    # experiments_list_file = config.get("METALEARNING", "experiments")
+    # task_file = config.get("EXPERIMENT", "task_args_pkl")
+    # tasks_file = config.get("METALEARNING", "tasks")
+
+    return call.getvalue()
 
 
 def check_dependencies():
