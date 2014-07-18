@@ -5,6 +5,7 @@ import functools
 import itertools
 import Queue
 import os
+import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -250,7 +251,11 @@ def plot_metafeatures(metafeatures_plot_dir, metafeatures, runs,
             return num
 
         # test if swapping two lines would decrease the number of intersections
-        def swap(label_positions, marker_positions, depth=0, maxdepth=maxdepth):
+        # TODO: if this was done with a datastructure different than dicts,
+        # it could be much faster, because there is a lot of redundant
+        # computing performed in the second iteration
+        def swap(label_positions, marker_positions, depth=0,
+                 maxdepth=maxdepth, best_found=sys.maxint):
             if len(label_positions) == 0:
                 return
 
@@ -263,26 +268,35 @@ def plot_metafeatures(metafeatures_plot_dir, metafeatures, runs,
                     tmp = label_positions[key1]
                     label_positions[key1] = label_positions[key2]
                     label_positions[key2] = tmp
-
                     if depth < maxdepth and two_step_look_ahead:
-                        swap(label_positions, marker_positions, depth=1)
+                        swap(label_positions, marker_positions,
+                             depth=depth+1, best_found=before)
 
                     after = number_of_intersections(label_positions, marker_positions)
 
-                    if before > after:
+                    if best_found > after and before > after:
                         improvement = True
-                        print "Swapped %s with %s" % (key1, key2)
+                        print before, after
+                        print "Depth %d: Swapped %s with %s" % (depth, key1, key2)
                     else:       # swap back...
                         tmp = label_positions[key1]
                         label_positions[key1] = label_positions[key2]
                         label_positions[key2] = tmp
+
                 # If it is not yet sorted perfectly, do another pass with
                 # two-step lookahead
-                if not improvement and after > 0:
-                    print "Not yet sorted perfectly, trying two-step lookahead"
-                    two_step_look_ahead = True
-                if not improvement and (two_step_look_ahead or maxdepth == 0):
+                if before == 0:
+                    print "Sorted perfectly..."
                     break
+                print depth, two_step_look_ahead
+                if two_step_look_ahead:
+                    break
+                if maxdepth == depth:
+                    print "Reached maximum recursion depth..."
+                    break
+                if not improvement and depth < maxdepth:
+                    print "Still %d errors, trying two-step lookahead" % before
+                    two_step_look_ahead = True
 
         swap(label_positions, marker_positions, maxdepth=maxdepth)
 
