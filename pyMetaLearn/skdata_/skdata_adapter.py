@@ -399,7 +399,7 @@ def convert_dataset_to_openml_dataset(name):
                                       ('fold', 'INTEGER')]
         valid_splits['data'] = []
 
-        X, Y = ds.get_npy(target='class', scaling='scaling')
+        X, Y = ds.get_npy(target='class', scaling='scale')
         for fold in range(10):
             valid_train_split, valid_test_split = \
                 t._get_fold(X[train_indices], Y[train_indices],

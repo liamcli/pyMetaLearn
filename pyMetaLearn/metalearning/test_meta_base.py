@@ -64,12 +64,17 @@ class MetaBaseTest(unittest.TestCase):
         runs = self.base.get_cv_runs('anneal.ORIG')
         self.assertEqual(1686, len(runs))
 
-
     def test_get_metafeatures_as_pandas(self):
         mf = self.base.get_metafeatures_as_pandas('kr-vs-kp')
         self.assertEqual(type(mf), pd.Series)
         self.assertEqual(mf.name, 'kr-vs-kp')
         self.assertEqual(mf.loc['number_of_instances'], 3196)
+
+    def test_get_metafeatures_times_as_pandas(self):
+        mf = self.base.get_metafeatures_times_as_pandas('kr-vs-kp')
+        self.assertEqual(type(mf), pd.Series)
+        self.assertEqual(mf.name, 'kr-vs-kp')
+        self.assertAlmostEqual(mf.loc['landmark_1NN'], 0.932075977325)
 
     def test_get_all_metafeatures_as_pandas(self):
         mf = self.base.get_all_metafeatures_as_pandas()
@@ -79,19 +84,40 @@ class MetaBaseTest(unittest.TestCase):
         self.assertEqual(mf.loc['anneal.ORIG', 'number_of_instances'], 898)
         self.assertEqual(mf.index[1], 'kr-vs-kp')
 
+    def test_get_all_metafeatures_times_as_pandas(self):
+        mf = self.base.get_all_metafeatures_times_as_pandas()
+        self.assertEqual(type(mf), pd.DataFrame)
+        self.assertEqual(3, mf.shape[0])
+        self.assertEqual(mf.index[0], 'anneal.ORIG')
+        self.assertEqual(mf.loc['anneal.ORIG', 'landmark_1NN'], 0.973479986191)
+        self.assertEqual(mf.index[1], 'kr-vs-kp')
+
     def test_get_train_metafeatures_as_pandas(self):
         mf = self.base.get_train_metafeatures_as_pandas('kr-vs-kp')
         self.assertEqual(type(mf), pd.Series)
         self.assertEqual(mf.name, 'kr-vs-kp')
         self.assertEqual(mf.loc['number_of_instances'], 2130)
 
+    def test_get_train_metafeatures_times_as_pandas(self):
+        mf = self.base.get_train_metafeatures_times_as_pandas('kr-vs-kp')
+        self.assertEqual(type(mf), pd.Series)
+        self.assertEqual(mf.name, 'kr-vs-kp')
+        self.assertAlmostEqual(mf.loc['landmark_1NN'], 0.4028840065)
+
     def test_get_all_train_metafeatures_as_pandas(self):
-        print os.getcwd()
         mf = self.base.get_all_train_metafeatures_as_pandas()
         self.assertEqual(type(mf), pd.DataFrame)
         self.assertEqual(3, mf.shape[0])
         self.assertEqual(mf.index[0], 'anneal.ORIG')
         self.assertEqual(mf.loc['anneal.ORIG', 'number_of_instances'], 598)
+        self.assertEqual(mf.index[1], 'kr-vs-kp')
+
+    def test_get_all_train_metafeatures_times_as_pandas(self):
+        mf = self.base.get_all_train_metafeatures_times_as_pandas()
+        self.assertEqual(type(mf), pd.DataFrame)
+        self.assertEqual(3, mf.shape[0])
+        self.assertEqual(mf.index[0], 'anneal.ORIG')
+        self.assertEqual(mf.loc['anneal.ORIG', 'landmark_1NN'], 0.0336389541626)
         self.assertEqual(mf.index[1], 'kr-vs-kp')
 
     """

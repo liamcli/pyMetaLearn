@@ -20,7 +20,7 @@ logger.setLevel(logging.INFO)
 Run = namedtuple("Run", ["params", "result"])
 
 class MetaBase(object):
-    def __init__(self, task_files, experiments):
+    def __init__(self, task_files, experiments, keep_configurations=None):
         """Container for dataset metadata and experiment results.
 
         Constructor arguments:
@@ -28,6 +28,8 @@ class MetaBase(object):
             performed.
         - experiments: A list in which every entry corresponds to one entry
             in datasets. It must contain a list of Runs.
+        - keep_parameters: Specifiy (parameter, value) pairs which should be
+            kept. Useful to look only at a subproblem, e.g. in the CASH problem
         """
 
         # TODO: read the tasks from the task_files
@@ -109,13 +111,18 @@ class MetaBase(object):
 
         for i, exp in enumerate(experiments):
             if not os.path.exists(exp.strip()):
+                print "Cannot find %s" % exp
                 runs = []
                 cv_runs = []
             else:
                 with open(exp.strip()) as fh:
-                    runs = self.read_experiment_pickle(fh)
+                    runs = self.read_experiment_pickle(fh, keep_configurations)
                     fh.seek(0)
-                    cv_runs = self.read_folds_from_experiment_pickle(fh)
+                    cv_runs = self.read_folds_from_experiment_pickle(fh, keep_configurations)
+
+                    if keep_configurations is not None:
+                        print "Kept %d configurations for %s" % (len(runs), exp.strip())
+
             self.runs.append(runs)
             self.cv_runs.append(cv_runs)
 
@@ -184,12 +191,54 @@ class MetaBase(object):
                              "values." % dataset_name)
         return df
 
+    def get_metafeatures_times_as_pandas(self, dataset_name,
+            split_file_name=None, metafeature_subset=None):
+        mf, times = self.dicts.datasets[dataset_name].get_metafeatures(
+            split_file_name, return_times=True, return_helper_functions=True)
+        df = pd.Series(data=times, name=dataset_name)
+
+        if metafeature_subset is not None:
+            subset = pyMetaLearn.metafeatures.metafeatures.subsets[metafeature_subset]
+            df = df.loc[subset]
+            if len(df) == 0:
+                logger.warn("Warning, empty metadata for ds %s" % dataset_name)
+
+        def check_finiteness(_df):
+            assert df.values.dtype == np.float64
+            if not np.isfinite(df.values).all():
+                logger.warn(df)
+                logger.warn(metafeature_subset)
+                raise ValueError("Metafeatures for dataset %s contain non-finite "
+                                 "values." % dataset_name)
+
+        if type(df) is dict:
+            for key in df:
+                check_finiteness(df[key])
+        if df.values.dtype == np.float64:
+            check_finiteness(df)
+        else:
+            raise NotImplementedError(type(df))
+
+        return df
+
     def get_all_metafeatures_as_pandas(self, metafeature_subset=None):
         """Create a pandas DataFrame for the metadata of all datasets."""
         series = []
 
         for key in self.dicts.datasets:
-            series.append(self.get_metafeatures_as_pandas(key, metafeature_subset))
+            series.append(self.get_metafeatures_as_pandas(key,
+                          metafeature_subset=metafeature_subset))
+
+        retval = pd.DataFrame(series)
+        return retval
+
+    def get_all_metafeatures_times_as_pandas(self, metafeature_subset=None):
+        """Create a pandas DataFrame for the metadata of all datasets."""
+        series = []
+
+        for key in self.dicts.datasets:
+            series.append(self.get_metafeatures_times_as_pandas(key,
+                          metafeature_subset=metafeature_subset))
 
         retval = pd.DataFrame(series)
         return retval
@@ -199,6 +248,12 @@ class MetaBase(object):
             estimation_procedure["local_test_split_file"]
         return self.get_metafeatures_as_pandas(dataset_name, split_file_name,
                                           subset)
+
+    def get_train_metafeatures_times_as_pandas(self, dataset_name, subset=None):
+        split_file_name = self.dicts.tasks[dataset_name].\
+            estimation_procedure["local_test_split_file"]
+        return self.get_metafeatures_times_as_pandas(dataset_name,
+            split_file_name, subset)
 
     def get_all_train_metafeatures_as_pandas(self, subset=None):
         series = []
@@ -211,23 +266,61 @@ class MetaBase(object):
         retval = pd.DataFrame(series)
         return retval
 
+    def get_all_train_metafeatures_times_as_pandas(self, subset=None):
+        series = []
+
+        for key in self.dicts.datasets:
+            split_file = self.dicts.tasks[key]. \
+                estimation_procedure["local_test_split_file"]
+            series.append(self.get_metafeatures_times_as_pandas(
+                key, split_file, subset))
+
+        retval = pd.DataFrame(series)
+        return retval
+
     """
     def get_cv_metafeatures_as_pandas(...
 
     def get_all_cv_metafeatures_as_pandas(...
     """
 
-    def read_experiment_pickle(self, fh):
+    def read_experiment_pickle(self, fh, keep_configurations=None):
         runs = list()
         trials = cPickle.load(fh)
         for trial in trials["trials"]:
+            add = True
+
+            if keep_configurations is not None:
+                # Keep parameters must be a list of tuples!
+                params = trial["params"]
+                for key, value in keep_configurations:
+                    # Work around annoying HPOlib bug!
+                    if str(params['-' + key]) != str(value):
+                        add = False
+                        break
+
+            if not add:
+                continue
             runs.append(Run(trial["params"], trial["result"]))
         return runs
 
-    def read_folds_from_experiment_pickle(self, fh):
+    def read_folds_from_experiment_pickle(self, fh, keep_configurations):
         runs = list()
         trials = cPickle.load(fh)
         for trial in trials["trials"]:
+            add = True
+
+            if keep_configurations is not None:
+                params = trial["params"]
+                # Keep parameters must be a list of tuples!
+                for key, value in keep_configurations:
+                    # Work around annoying HPOlib bug!
+                    if str(params['-' + key]) != str(value):
+                        add = False
+                        break
+
+            if not add:
+                continue
             runs.append(list())
             ir = trial["instance_results"]
             for fold in range(len(ir)):

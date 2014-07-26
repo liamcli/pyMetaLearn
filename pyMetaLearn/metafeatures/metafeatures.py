@@ -611,6 +611,7 @@ def pca(X, Y):
     pca = sklearn.decomposition.PCA(copy=True)
     rs = np.random.RandomState(42)
     indices = np.arange(X.shape[0])
+    print "PCA", X.shape
     for i in range(10):
         try:
             rs.shuffle(indices)
@@ -629,8 +630,10 @@ def pca_95percent(X, Y):
         return 1
     sum_ = 0.
     idx = 0
+    print "95 Percent", X.shape
     while sum_ < 0.95:
         sum_ += pca_.explained_variance_ratio_[idx]
+        print sum_
         idx += 1
     return float(idx)/float(X.shape[1])
 
@@ -753,8 +756,11 @@ npy_metafeatures = set(["landmark_lda", "landmark_naive_bayes",
                         "landmark_decision_tree",
                         "landmark_decision_node_learner",
                         "landmark_random_node_learner",
-                        "landmark_worst_node_learner", "landmark_1NN",
-                        "pca_95%", "pca_kurtosis_first_pc", "pca_skewness_first_pc"])
+                        "landmark_worst_node_learner",
+                        "landmark_1NN",
+                        "pca_95percent",
+                        "pca_kurtosis_first_pc",
+                        "pca_skewness_first_pc"])
 
 subsets = dict()
 # All implemented metafeatures

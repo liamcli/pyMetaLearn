@@ -8,6 +8,8 @@ import time
 import numpy as np
 import pandas as pd
 import scipy
+import scipy.misc
+import scipy.optimize
 import sklearn.ensemble
 import sklearn.utils
 
@@ -21,33 +23,25 @@ class KNearestDatasets(object):
     def __init__(self, distance='l1', random_state=None, distance_kwargs=None):
         self.distance = distance
         self.model = None
-        self.distance_kwargs = {}
+        self.distance_kwargs = distance_kwargs
         self.metafeatures = None
         self.runs = None
         self.best_hyperparameters_per_dataset = None
         self.random_state = sklearn.utils.check_random_state(random_state)
+
+        if self.distance_kwargs is None:
+            self.distance_kwargs = {}
 
     def fit(self, metafeatures, runs):
         assert isinstance(metafeatures, pd.DataFrame)
         assert metafeatures.values.dtype == np.float64
         assert np.isfinite(metafeatures.values).all()
         assert isinstance(runs, dict)
-        assert len(runs) == metafeatures.shape[0]
+        assert len(runs) == metafeatures.shape[0], (len(runs), metafeatures
+                                                    .shape[0])
 
         self.metafeatures = metafeatures
         self.runs = runs
-        if self.distance == 'learned':
-            # TODO: instead of a random forest, the user could provide a generic
-            # import call with which it is possible to import a class which
-            # implements the sklearn fit and predict function...
-            self.distance_kwargs['random_state'] = self.random_state
-            self.model = LearnedDistanceRF(**self.distance_kwargs)
-            self.model.fit(metafeatures, runs)
-        elif self.distance == 'mfs_l1':
-            # This implements metafeature selection as described by Matthias
-            # Reif in 'Metalearning for evolutionary parameter optimization
-            # of classifiers'
-            pass
 
         # for each dataset, sort the runs according to their result
         best_hyperparameters_per_dataset = {}
@@ -56,6 +50,27 @@ class KNearestDatasets(object):
                 sorted(runs[dataset_name], key=lambda t: t.result)
         self.best_hyperparameters_per_dataset = best_hyperparameters_per_dataset
 
+        if self.distance == 'learned':
+            # TODO: instead of a random forest, the user could provide a generic
+            # import call with which it is possible to import a class which
+            # implements the sklearn fit and predict function...
+            self.distance_kwargs['random_state'] = self.random_state
+            self.model = LearnedDistanceRF(**self.distance_kwargs)
+            return self.model.fit(metafeatures, runs)
+        elif self.distance == 'mfs_l1':
+            # This implements metafeature selection as described by Matthias
+            # Reif in 'Metalearning for evolutionary parameter optimization
+            # of classifiers'
+            # TODO: should this really in the model variable or not rather
+            # something called filter?
+            self.model = MetaFeatureSelection(**self.distance_kwargs)
+            return self.model.fit(metafeatures, runs)
+        elif self.distance == 'mfw_l1':
+            self.model = MetaFeatureSelection(mode='weight', **self.distance_kwargs)
+            return self.model.fit(metafeatures, runs)
+        elif self.distance not in ['l1', 'l2', 'random']:
+            raise NotImplementedError(self.distance)
+
     def kNearestDatasets(self, x, k=1):
         # k=-1 return all datasets sorted by distance
         assert type(x) == pd.Series
@@ -63,9 +78,9 @@ class KNearestDatasets(object):
             raise ValueError('Number of neighbors k cannot be zero or negative.')
         distances = self._calculate_distances_to(x)
         sorted_distances = sorted(distances.items(), key=lambda t: t[1])
-        sys.stderr.write(str(sorted_distances))
-        sys.stderr.write("\n")
-        sys.stderr.flush()
+        # sys.stderr.write(str(sorted_distances))
+        # sys.stderr.write("\n")
+        # sys.stderr.flush()
 
         if k == -1:
             k = len(sorted_distances)
@@ -97,12 +112,17 @@ class KNearestDatasets(object):
         return kbest[:k]
 
     def _calculate_distances_to(self, other):
+        # TODO can this calculate distances to itself?
         distances = {}
         assert isinstance(other, pd.Series)
         assert other.values.dtype == np.float64
         assert np.isfinite(other.values).all()
 
-        if self.distance in ['l1', 'l2']:
+        if other.name in self.metafeatures.index:
+            raise ValueError("You are trying to calculate the distance to a "
+                             "dataset which is in your base data.")
+
+        if self.distance in ['l1', 'l2', 'mfs_l1', 'mfw_l1']:
             metafeatures, other = self._scale(self.metafeatures, other)
         else:
             metafeatures = self.metafeatures
@@ -155,6 +175,15 @@ class KNearestDatasets(object):
         #logger.info(predictions[0] * -1)
         return (predictions[0] * -1) + 1
 
+    def _mfs_l1(self, d1, d2):
+        d1 = d1.copy() * self.model.weights
+        d2 = d2.copy() * self.model.weights
+        return self._l1(d1, d2)
+
+    def _mfw_l1(self, d1, d2):
+        return self._mfs_l1(d1, d2)
+
+
 class LearnedDistanceRF(object):
     def __init__(self, n_estimators=10, max_features=1.0, min_samples_split=2,
                  min_samples_leaf=1, n_jobs=2, random_state=None,
@@ -170,7 +199,7 @@ class LearnedDistanceRF(object):
 
     def fit(self, metafeatures, runs):
         X, Y = self._create_dataset(metafeatures, runs)
-        model = self.model._fit(X, Y)
+        model = self._fit(X, Y)
         return model
 
     def _create_dataset(self, metafeatures, runs):
@@ -185,6 +214,146 @@ class LearnedDistanceRF(object):
     def predict(self, metafeatures):
         assert isinstance(metafeatures, np.ndarray)
         return self.model.predict(metafeatures)
+
+
+class MetaFeatureSelection(object):
+    def __init__(self, max_number_of_combinations=10, random_state=None,
+                 k=1, max_features=0.5, mode='select'):
+        self.max_number_of_combinations = max_number_of_combinations
+        self.random_state = sklearn.utils.check_random_state(random_state)
+        self.k = k
+        self.max_features = max_features
+        self.weights = None
+        self.mode= mode
+
+    def fit(self, metafeatures, runs):
+        self.datasets = metafeatures.index
+        self.all_other_datasets = {}             # For faster indexing
+        self.all_other_runs = {}               # For faster indexing
+        self.parameter_distances = defaultdict(dict)
+        self.best_hyperparameters_per_dataset = {}
+        self.mf_names = metafeatures.columns
+        self.kND = KNearestDatasets(distance='l1')
+
+        for dataset in self.datasets:
+            self.all_other_datasets[dataset] = \
+                pd.Index([name for name in self.datasets if name != dataset])
+
+        for dataset in self.datasets:
+            self.all_other_runs[dataset] = \
+                {key: runs[key] for key in runs if key != dataset}
+
+        for dataset in self.datasets:
+            self.best_hyperparameters_per_dataset[dataset] = \
+                sorted(runs[dataset], key=lambda t: t.result)[0]
+
+        for d1, d2 in itertools.combinations(self.datasets, 2):
+            hps1 = self.best_hyperparameters_per_dataset[d1]
+            hps2 = self.best_hyperparameters_per_dataset[d2]
+            keys = set(hps1.params.keys())
+            keys.update(hps2.params.keys())
+            dist = 0
+            for key in keys:
+                # TODO: test this; it can happen that string etc occur
+                try:
+                    p1 = float(hps1.params.get(key, 0))
+                    p2 = float(hps2.params.get(key, 0))
+                    dist += abs(p1 - p2)
+                except:
+                    dist += 0 if hps1.params.get(key, 0) == \
+                                 hps2.params.get(key, 0) else 1
+
+                #dist += abs(hps1.params.get(key, 0) - hps2.params.get(key, 0))
+            self.parameter_distances[d1][d2] = dist
+            self.parameter_distances[d2][d1] = dist
+
+        if self.mode == 'select':
+            self.weights = self._fit_binary_weights(metafeatures)
+        elif self.mode == 'weight':
+            self.weights = self._fit_weights(metafeatures)
+
+        sys.stderr.write(str(self.weights))
+        sys.stderr.write('\n')
+        sys.stderr.flush()
+        return self.weights
+
+    def _fit_binary_weights(self, metafeatures):
+        best_selection = None
+        best_distance = sys.maxint
+
+        for i in range(2, int(np.round(len(self.mf_names) * self.max_features))):
+            sys.stderr.write(str(i))
+            sys.stderr.write('\n')
+            sys.stderr.flush()
+
+            combinations = []
+            for j in range(self.max_number_of_combinations):
+                combination = []
+                target = i
+                maximum = len(self.mf_names)
+                while len(combination) < target:
+                    random = self.random_state.randint(maximum)
+                    name = self.mf_names[random]
+                    if name not in combination:
+                        combination.append(name)
+
+                combinations.append(pd.Index(combination))
+
+            for j, combination in enumerate(combinations):
+                dist = 0
+                for dataset in self.datasets:
+                    hps = self.best_hyperparameters_per_dataset[dataset]
+                    self.kND.fit(metafeatures.loc[self.all_other_datasets[
+                        dataset], combination], self.all_other_runs[dataset])
+                    nearest_datasets = self.kND.kBestSuggestions(
+                        metafeatures.loc[dataset, np.array(combination)], self.k)
+                    for nd in nearest_datasets:
+                        # print "HPS", hps.params, "nd", nd[2]
+                        dist += self.parameter_distances[dataset][nd[0]]
+
+                if dist < best_distance:
+                    best_distance = dist
+                    best_selection = combination
+
+        weights = dict()
+        for metafeature in metafeatures:
+            if metafeature in best_selection:
+                weights[metafeature] = 1
+            else:
+                weights[metafeature] = 0
+        return pd.Series(weights)
+
+    def _fit_weights(self, metafeatures):
+        best_weights = None
+        best_distance = sys.maxint
+
+        def objective(weights):
+            dist = 0
+            for dataset in self.datasets:
+                self.kND.fit(metafeatures.loc[self.all_other_datasets[
+                    dataset], :] * weights, self.all_other_runs[dataset])
+                nearest_datasets = self.kND.kBestSuggestions(
+                    metafeatures.loc[dataset, :] * weights, self.k)
+                for nd in nearest_datasets:
+                    dist += self.parameter_distances[dataset][nd[0]]
+
+            return dist
+
+        for i in range(10):
+            w0 = np.ones((len(self.mf_names, ))) * 0.5 + \
+                (np.random.random(size=len(self.mf_names)) - 0.5) * i / 10
+            bounds = [(0, 1) for idx in range(len(self.mf_names))]
+
+            res = scipy.optimize.minimize\
+                (objective, w0, bounds=bounds, method='L-BFGS-B',
+                 options={'disp': True})
+
+            if res.fun < best_distance:
+                best_distance = res.fun
+                best_weights = pd.Series(res.x, index=self.mf_names)
+
+        return best_weights
+
 
 
 ################################################################################
@@ -234,9 +403,10 @@ if __name__ == "__main__":
       * metalearning_directory
 
     You can also enable forward selection by adding '--forward_selection True'
-
+    You can also enable embedded feature selection by adding '--embedded_selection True'
+    You can add '--keep_configurations -preprocessing=None,-classifier=LibSVM
     Sample call: python kND.py --task_files_list /home/feurerm/thesis/experiments/experiment/2014_06_01_AutoSklearn_metalearning/tasks.txt
-    --experiment_files_list /home/feurerm/thesis/experiments/experiment/2014_06_01_AutoSklearn_metalearning/experiments_fold0.txt
+    --experiments_list /home/feurerm/thesis/experiments/experiment/2014_06_01_AutoSklearn_metalearning/experiments_fold0.txt
     --metalearning_directory /home/feurerm/thesis/experiments/experiment --params -random_state 5
     """
     starttime = time.time()
@@ -246,10 +416,17 @@ if __name__ == "__main__":
 
     with open(args["task_files_list"]) as fh:
          task_files_list = fh.readlines()
-    with open(args["experiment_files_list"]) as fh:
-        experiments_file_list = fh.readlines()
+    with open(args["experiments_list"]) as fh:
+         experiments_list = fh.readlines()
 
-    meta_base = MetaBase(task_files_list, experiments_file_list)
+    if 'keep_configurations' in args:
+        keep_configurations = args['keep_configurations']
+        keep_configurations = keep_configurations.split(',')
+        keep_configurations = tuple([tuple(kc.split('=')) for kc in keep_configurations])
+    else:
+        keep_configurations = None
+
+    meta_base = MetaBase(task_files_list, experiments_list, keep_configurations)
     metafeatures = meta_base.get_all_train_metafeatures_as_pandas()
     runs = meta_base.get_all_runs()
 
@@ -260,14 +437,13 @@ if __name__ == "__main__":
         cPickle.dump((X, Y, metafeatures), fh, -1)
 
     print "Metafeatures", metafeatures.shape
-    print "X", X.shape
-    print "Y", Y.shape
+    print "X", X.shape, np.isfinite(X).all().all()
+    print "Y", Y.shape, np.isfinite(Y).all()
+    print Y
 
 
     metafeature_sets = Queue.Queue()
-    if 'forward_selection' not in args:
-        metafeature_sets.put(metafeatures.columns)
-    else:
+    if 'forward_selection' in args:
         used_metafeatures = []
         metafeature_performance = []
         print "Starting forward selection ",
@@ -276,6 +452,12 @@ if __name__ == "__main__":
             metafeature_sets.put(pd.Index([m1, m2]))
             i += 1
         print "with %d metafeature combinations" % i
+    elif 'embedded_selection' in args:
+        metafeature_performance = []
+        metafeature_sets.put(metafeatures.columns)
+    else:
+        metafeature_sets.put(metafeatures.columns)
+
 
     while not metafeature_sets.empty():
         metafeature_set = metafeature_sets.get()
@@ -330,6 +512,7 @@ if __name__ == "__main__":
         print "MSE", mse, mse_std
         print "Mean tau", rho, rho_std
         duration = time.time() - starttime
+
         if 'forward_selection' in args:
             metafeature_performance.append((mse, metafeature_set))
             # TODO: this can also be sorted in a pareto-optimal way...
@@ -352,6 +535,21 @@ if __name__ == "__main__":
                     tmp.append(metafeature)
                     metafeature_sets.put(pd.Index(tmp))
                 metafeature_performance = []
+
+        elif 'embedded_selection' in args:
+            if len(metafeature_set) <= 2:
+                break
+
+            # Remove a metafeature; elements are (average rank, name);
+            # only take the name from index two on
+            # because the metafeature is preceeded by the index of the
+            # dataset which is either 0_ or 1_
+            remove = mean_ranks[-1][1][2:]
+            print "Going to remove", remove
+            keep = pd.Index([mf_name for mf_name in metafeature_set if
+                             mf_name != remove])
+            print "I will keep", keep
+            metafeature_sets.put(keep)
 
         else:
             for rank in mean_ranks:

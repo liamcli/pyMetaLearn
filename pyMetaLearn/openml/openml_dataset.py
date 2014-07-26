@@ -318,12 +318,14 @@ class OpenMLDataset(Dataset):
         if not np.any(np.isfinite(array)):
             raise NotImplementedError()
 
-        if scaling == "scale":
+        if scaling is None:
+            pass
+        elif scaling == "scale":
             array = self.normalize_scaling(array)
         elif scaling == "zero_mean":
             array = self.normalize_standardize(array)
         else:
-            pass
+            raise NotImplementedError(str(scaling))
         fixed_array = ma.fix_invalid(array, copy=True, fill_value=0)
 
         if not np.isfinite(fixed_array).all():
@@ -355,8 +357,6 @@ class OpenMLDataset(Dataset):
 
     def get_metafeatures(self, split_file_name=None, return_times=None,
                          return_helper_functions=False):
-        if return_helper_functions:
-            raise NotImplementedError()
 
         # Want a file because this enforces that the splits are actually
         # saved somewhere
@@ -414,14 +414,14 @@ class OpenMLDataset(Dataset):
                         metafeatures['data'].append([key, 'HELPER_FUNCTION', fold,
                                                      repeat, '?' , times[key]])
 
-        lock = lockfile.FileLock(metafeatures_filename)
-        with lock:
-            # Replace None values with a ?
-            for idx in range(len(metafeatures['data'])):
-                if metafeatures['data'][idx][4] is None:
-                    metafeatures['data'][idx][4] = '?'
-            with open(metafeatures_filename, "w") as fh:
-                arff.dump(metafeatures, fh)
+                lock = lockfile.FileLock(metafeatures_filename)
+                with lock:
+                    # Replace None values with a ?
+                    for idx in range(len(metafeatures['data'])):
+                        if metafeatures['data'][idx][4] is None:
+                            metafeatures['data'][idx][4] = '?'
+                    with open(metafeatures_filename, "w") as fh:
+                        arff.dump(metafeatures, fh)
 
         # TODO: adapt for folds!
         if len(splits_per_fold) == 1 and splits_per_fold.keys()[0] == 0:
@@ -436,10 +436,12 @@ class OpenMLDataset(Dataset):
             metafeatures_by_fold = defaultdict(dict)
             times_by_fold = defaultdict(dict)
             for metafeature in metafeatures['data']:
-                if metafeature[1] != 'METAFEATURE': continue
+                if not return_helper_functions and metafeature[1] != 'METAFEATURE':
+                    continue
                 metafeatures_by_fold[metafeature[2]][metafeature[0]] = metafeature[4]
             for metafeature in metafeatures['data']:
-                if metafeature[1] != 'METAFEATURE': continue
+                if not return_helper_functions and metafeature[1] != 'METAFEATURE':
+                    continue
                 times_by_fold[metafeature[2]][metafeature[0]] = metafeature[5]
             if return_times:
                 return metafeatures_by_fold, times_by_fold

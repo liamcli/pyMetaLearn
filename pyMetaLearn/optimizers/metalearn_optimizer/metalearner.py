@@ -41,6 +41,7 @@ class MetaLearningOptimizer(object):
         self.seed = seed
         self.use_features = use_features
         self.distance_kwargs = distance_kwargs
+        self.kND = None     # For caching, makes things faster...
 
         self.meta_base = MetaBase(task_files_list, experiments_file_list)
 
@@ -111,26 +112,28 @@ class MetaLearningOptimizer(object):
 
     def _learn(self, exclude_double_configurations=True):
         dataset_metafeatures, all_other_metafeatures = self._get_metafeatures()
+        if self.kND is None:
 
-        # In case that we learn our distance function, get the parameters for
-        #  the random forest
-        if self.distance_kwargs:
-            rf_params = ast.literal_eval(self.distance_kwargs)
-        else:
-            rf_params = None
+            # In case that we learn our distance function, get the parameters for
+            #  the random forest
+            if self.distance_kwargs:
+                rf_params = ast.literal_eval(self.distance_kwargs)
+            else:
+                rf_params = None
 
-        # To keep the distance the same in every iteration, we create a new
-        # random state
-        random_state = sklearn.utils.check_random_state(self.seed)
-        kND = KNearestDatasets(distance=self.distance,
-                               random_state=random_state,
-                               distance_kwargs=rf_params)
+            # To keep the distance the same in every iteration, we create a new
+            # random state
+            random_state = sklearn.utils.check_random_state(self.seed)
+            kND = KNearestDatasets(distance=self.distance,
+                                   random_state=random_state,
+                                   distance_kwargs=rf_params)
 
-        runs = dict()
-        for name in all_other_metafeatures.index:
-            runs[name] = self.meta_base.get_runs(name)
-        kND.fit(all_other_metafeatures, runs)
-        return kND.kBestSuggestions(dataset_metafeatures, k=-1,
+            runs = dict()
+            for name in all_other_metafeatures.index:
+                runs[name] = self.meta_base.get_runs(name)
+            kND.fit(all_other_metafeatures, runs)
+            self.kND = kND
+        return self.kND.kBestSuggestions(dataset_metafeatures, k=-1,
             exclude_double_configurations=exclude_double_configurations)
 
     def _get_metafeatures(self):
@@ -142,7 +145,7 @@ class MetaLearningOptimizer(object):
         dataset = pyMetaLearn.openml.manage_openml_data.get_local_dataset(task.dataset_id)
 
         all_metafeatures = self.meta_base.get_all_train_metafeatures_as_pandas()
-        if self.use_features is not None and \
+        if self.use_features and \
                 (type(self.use_features) != str or self.use_features != ''):
             logger.warn("Going to keep the following features %s",
                     str(self.use_features))
@@ -197,7 +200,8 @@ def parse_parameters(args=None):
     parser.add_argument("metalearning_directory", type=str,
                         help="A directory with the metalearning datastructure")
     parser.add_argument("-d", "--distance_measure", type=str, default='l1',
-                        choices=['l1', 'l2', 'learned', 'random'])
+                        choices=['l1', 'l2', 'learned', 'random', 'mfs_l1',
+                                 'mfw_l1'])
     parser.add_argument("--distance_keep_features", type=str, default='',)
     parser.add_argument("--cli_target")
     # parser.add_argument("-p", "--params", required=True)

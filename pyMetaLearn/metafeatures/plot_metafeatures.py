@@ -5,6 +5,7 @@ import functools
 import itertools
 import Queue
 import os
+import StringIO
 import sys
 
 import matplotlib.pyplot as plt
@@ -12,13 +13,13 @@ import numpy as np
 import pandas as pd
 import scipy.stats
 from sklearn.decomposition import PCA
+
 try:
     from sklearn.manifold import TSNE
     from sklearn.metrics.pairwise import PAIRWISE_DISTANCE_FUNCTIONS
     import sklearn.metrics.pairwise
 except:
     print "Failed to load TSNE, probably you're using sklearn 0.14.X"
-import StringIO
 
 from pyMetaLearn.metalearning.meta_base import MetaBase
 from pyMetaLearn.metafeatures.metafeatures import subsets
@@ -40,8 +41,8 @@ def load_dataset(dataset, dataset_directory):
     return X, Y
 
 
-def plot_metafeatures(metafeatures_plot_dir, metafeatures, runs,
-                      method='pca', seed=1, depth=1, distance='l2'):
+def plot_metafeatures(metafeatures_plot_dir, metafeatures, metafeatures_times,
+                      runs, method='pca', seed=1, depth=1, distance='l2'):
     """Project datasets in a 2d space and plot them.
 
     arguments:
@@ -55,6 +56,85 @@ def plot_metafeatures(metafeatures_plot_dir, metafeatures, runs,
     if type(metafeatures) != pd.DataFrame:
         raise ValueError("Argument metafeatures must be of type pd.Dataframe "
                          "but is %s" % str(type(metafeatures)))
+
+    ############################################################################
+    # Write out the datasets and their size as a TEX table
+    # TODO put this in an own function
+    dataset_tex = StringIO.StringIO()
+    dataset_tex.write('\\begin{tabular}{lrrr}\n')
+    dataset_tex.write('\\textbf{Dataset name} & '
+                      '\\textbf{\#features} & '
+                      '\\textbf{\#patterns} & '
+                      '\\textbf{\#classes} \\\\\n')
+
+    num_features = []
+    num_instances = []
+    num_classes = []
+
+    for dataset in sorted(metafeatures.index):
+        dataset_tex.write('%s & %d & %d & %d \\\\\n' % (
+                        dataset.replace('larochelle_etal_2007_', '').replace(
+                            '_', '-'),
+                        metafeatures.loc[dataset]['number_of_features'],
+                        metafeatures.loc[dataset]['number_of_instances'],
+                        metafeatures.loc[dataset]['number_of_classes']))
+        num_features.append(metafeatures.loc[dataset]['number_of_features'])
+        num_instances.append(metafeatures.loc[dataset]['number_of_instances'])
+        num_classes.append(metafeatures.loc[dataset]['number_of_classes'])
+
+    dataset_tex.write('Minimum & %.1f & %.1f & %.1f \\\\\n' %
+        (np.min(num_features), np.min(num_instances), np.min(num_classes)))
+    dataset_tex.write('Maximum & %.1f & %.1f & %.1f \\\\\n' %
+        (np.max(num_features), np.max(num_instances), np.max(num_classes)))
+    dataset_tex.write('Mean & %.1f & %.1f & %.1f \\\\\n' %
+        (np.mean(num_features), np.mean(num_instances), np.mean(num_classes)))
+
+    dataset_tex.write('10\\%% quantile & %.1f & %.1f & %.1f \\\\\n' % (
+        np.percentile(num_features, 10), np.percentile(num_instances, 10),
+        np.percentile(num_classes, 10)))
+    dataset_tex.write('90\\%% quantile & %.1f & %.1f & %.1f \\\\\n' % (
+        np.percentile(num_features, 90), np.percentile(num_instances, 90),
+        np.percentile(num_classes, 90)))
+    dataset_tex.write('median & %.1f & %.1f & %.1f \\\\\n' % (
+        np.percentile(num_features, 50), np.percentile(num_instances, 50),
+        np.percentile(num_classes, 50)))
+    dataset_tex.write('\\end{tabular}')
+    dataset_tex.seek(0)
+
+    dataset_tex_output = os.path.join(metafeatures_plot_dir, 'datasets.tex')
+    with open(dataset_tex_output, 'w') as fh:
+        fh.write(dataset_tex.getvalue())
+
+    ############################################################################
+    # Write out a list of metafeatures, each with the min/max/mean
+    # calculation time and the min/max/mean value
+    metafeatures_tex = StringIO.StringIO()
+    metafeatures_tex.write('\\begin{tabular}{lrrrrrr}\n')
+    metafeatures_tex.write('\\textbf{Metafeature} & '
+                      '\\textbf{Minimum} & '
+                      '\\textbf{Mean} & '
+                      '\\textbf{Maximum} &'
+                      '\\textbf{Minimum time} &'
+                      '\\textbf{Mean time} &'
+                      '\\textbf{Maximum time} '
+                      '\\\\\n')
+
+    for mf_name in sorted(metafeatures.columns):
+        metafeatures_tex.write('%s & %.2f & %.2f & %.2f & %.2f & %.2f & %.2f \\\\\n'
+                               % (mf_name.replace('_', '-'),
+                                  metafeatures.loc[:,mf_name].min(),
+                                  metafeatures.loc[:,mf_name].mean(),
+                                  metafeatures.loc[:,mf_name].max(),
+                                  metafeature_times.loc[:, mf_name].min(),
+                                  metafeature_times.loc[:, mf_name].mean(),
+                                  metafeature_times.loc[:, mf_name].max()))
+
+    metafeatures_tex.write('\\end{tabular}')
+    metafeatures_tex.seek(0)
+
+    metafeatures_tex_output = os.path.join(metafeatures_plot_dir, 'metafeatures.tex')
+    with open(metafeatures_tex_output, 'w') as fh:
+        fh.write(metafeatures_tex.getvalue())
 
     # Without this scaling the transformation for visualization purposes is
     # useless
@@ -127,61 +207,6 @@ def plot_metafeatures(metafeatures_plot_dir, metafeatures, runs,
     slots.extend([(-0.1 + 0.05 * i, -0.1) for i in range(25)])
     # 24 datasets on the left x-axis
     slots.extend([(-0.1, 1.05 - 0.05 * i) for i in range(24)])
-    full_slots = {}
-
-
-    # First try on arranging the datasets in an optimal way with a constraint solver...
-    # ...which obviously doesn't work...
-    """
-    # from package python-constraint
-    import constraint
-
-    # http://labix.org/python-constraint
-    # Compute the optimal order for the dataset labels
-    def no_intersection(start1, end1, start2, end2):
-        # Compute if there is an intersection, for the algorithm see
-        # Computer Graphics by F.S.Hill
-
-        # If one vector is just a point, it cannot intersect with a line...
-        #for v in [start1, start2, end1, end2]:
-        #    if not np.isfinite(v).all():
-        #        return True     # Obviously there is no intersection
-
-        def perpendicular(d):
-            return np.array((-d[1], d[0]))
-
-        d1 = end1 - start1      # denoted b
-        d2 = end2 - start2      # denoted d
-        d2_1 = start2 - start1  # denoted c
-        d1_perp = perpendicular(d1)   # denoted by b_perp
-        d2_perp = perpendicular(d2)   # denoted by d_perp
-
-        t = np.dot(d2_1, d2_perp) / np.dot(d1, d2_perp)
-        u =  - np.dot(d2_1, d1_perp) / np.dot(d2, d1_perp)
-
-        if 0 <= t <= 1 and 0 <= u <= 1:
-            return False    # There is an intersection
-        else:
-            return True     # There is no intersection
-
-    problem = constraint.Problem()
-    problem.addConstraint(constraint.AllDifferentConstraint())
-    # A variable is which label is assigned to which slot; as there are only
-    # 49 slots, the rest won't add constraints
-    for i in range(metafeatures.shape[0]):
-        problem.addVariable("%i" % i, range(len(slots)))
-
-    for i, j in itertools.permutations(range(metafeatures.shape[0]), r=2):
-        end1 = np.array((transformation[i, 0], transformation[i, 1]))
-        end2 = np.array((transformation[j, 0], transformation[j, 1]))
-        constraint_function = functools.partial(no_intersection,
-            end1=end1, end2=end2)
-        problem.addConstraint(lambda v1, v2: constraint_function(
-            start1=np.array((slots[v1][0], slots[v1][1])),
-            start2=np.array((slots[v2][0], slots[v2][1]))), ["%i" % i, "%i" % j])
-
-    print problem.getSolution()
-    """
 
     # Align the labels on the outer axis
     labels_top = []
@@ -346,6 +371,8 @@ def plot_metafeatures(metafeatures_plot_dir, metafeatures, runs,
         ax.scatter(x, y, marker='o', label=label, s=80, linewidths=0.1,
                    color='blue', edgecolor='black')
 
+        label = label.replace('larochelle_etal_2007_', '')
+
         x = ax.annotate(label, xy=(x, y), xytext=(label_x, label_y),
                     ha=ha, va=va, rotation=rotation,
                     bbox=dict(boxstyle='round', fc='gray', alpha=0.5),
@@ -441,10 +468,14 @@ if __name__ == "__main__":
     pyMetaLearn.openml.manage_openml_data.set_local_directory(
         args.experiment_directory)
     meta_base = MetaBase(task_files_list, experiments_file_list)
-    metafeatures = meta_base.get_all_train_metafeatures_as_pandas()
+    metafeatures = meta_base.get_all_metafeatures_as_pandas(
+        metafeature_subset=args.subset)
+    metafeature_times = meta_base.get_all_metafeatures_times_as_pandas(
+        metafeature_subset=args.subset)
 
-    if args.subset:
-        metafeatures = metafeatures.loc[:,subsets[args.subset]]
+    #if args.subset:
+    #    metafeatures = metafeatures.loc[:,subsets[args.subset]]
+    #    metafeature_times = metafeature_times.loc[:,subsets[args.subset]]
 
     runs = meta_base.get_all_runs()
 
@@ -459,8 +490,8 @@ if __name__ == "__main__":
     except:
         pass
 
-    plot_metafeatures(metafeatures_plot_dir, metafeatures, runs,
-                      method=args.method, seed=args.seed, depth=args.depth,
-                      distance=args.distance)
+    plot_metafeatures(metafeatures_plot_dir, metafeatures, metafeature_times,
+                      runs, method=args.method, seed=args.seed,
+                      depth=args.depth, distance=args.distance)
 
 

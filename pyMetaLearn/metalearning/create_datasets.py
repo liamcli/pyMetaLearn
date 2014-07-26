@@ -72,11 +72,13 @@ def create_predict_spearman_rank(metafeatures, experiments, iterator):
 
         responses_1 = np.zeros((len(experiments_1)), dtype=np.float64)
         responses_2 = np.zeros((len(experiments_1)), dtype=np.float64)
-        # TODO: check ordering...
-        for idx, zipped in enumerate(zip(experiments_1, experiments_2)):
+
+        for idx, zipped in enumerate(zip(
+                sorted(experiments_1, key=lambda t: str(t.params)),
+                sorted(experiments_2, key=lambda t: str(t.params)))):
             # Test if the order of the params is the same
             exp_1, exp_2 = zipped
-            assert exp_1.params == exp_2.params
+            assert exp_1.params == exp_2.params, (experiments_1, experiments_2 )
             responses_1[idx] = exp_1.result
             responses_2[idx] = exp_2.result
 
@@ -84,6 +86,7 @@ def create_predict_spearman_rank(metafeatures, experiments, iterator):
         #rho, p = scipy.stats.kendalltau(responses_1, responses_2)
         if not np.isfinite(rho):
             rho = 0
+
         Y.append(rho)
         Y_names.append(name)
 

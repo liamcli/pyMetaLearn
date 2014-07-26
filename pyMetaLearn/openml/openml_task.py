@@ -96,7 +96,8 @@ class OpenMLTask(object):
         # TODO: add possibility to add the scaling etc to the dataset
         # creation routine!
         dataset = self._get_dataset()
-        X, Y = dataset.get_npy(target=self.target_feature.lower())
+        X, Y = dataset.get_npy(target=self.target_feature.lower(),
+                               scaling='scale')
         return X, Y
 
     def evaluate(self, algo):
