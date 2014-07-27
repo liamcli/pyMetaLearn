@@ -47,4 +47,14 @@ def manipulate_config(config):
 
     config.set('SPEARMINT', 'path_to_optimizer', path_to_optimizer)
 
+    if not config.has_option('METALEARNING', 'tasks'):
+        raise Exception("METALEARNING:tasks not specified in config.cfg")
+    if not os.path.exists(config.get('METALEARNING', 'tasks')):
+        raise Exception('Tasks file %s does not exist' % config.get('METALEARNING', 'tasks'))
+
+    if not config.has_option('METALEARNING', 'experiments'):
+        raise Exception("METALEARNING:experiments not specified in config.cfg")
+    if not os.path.exists(config.get('METALEARNING', 'experiments')):
+        raise Exception('Experiments file %s does not exist' % config.get('METALEARNING', 'experiments'))
+
     return config

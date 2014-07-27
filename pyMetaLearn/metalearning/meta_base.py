@@ -302,6 +302,7 @@ class MetaBase(object):
             if not add:
                 continue
             runs.append(Run(trial["params"], trial["result"]))
+
         return runs
 
     def read_folds_from_experiment_pickle(self, fh, keep_configurations):

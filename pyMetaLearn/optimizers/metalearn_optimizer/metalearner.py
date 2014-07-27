@@ -28,7 +28,7 @@ def test_function(params):
 class MetaLearningOptimizer(object):
     def __init__(self, task_file, task_files_list, experiments_file_list,
                  openml_dir, distance='l1', seed=None,
-                 use_features='', distance_kwargs=None):
+                 use_features='', distance_kwargs=None, subset='all'):
         # Document that this has a state, namely the task_file on which it
         # operates;
         # Does not yet work on cv folds, but they are too expensive to train
@@ -41,6 +41,7 @@ class MetaLearningOptimizer(object):
         self.seed = seed
         self.use_features = use_features
         self.distance_kwargs = distance_kwargs
+        self.subset = subset
         self.kND = None     # For caching, makes things faster...
 
         self.meta_base = MetaBase(task_files_list, experiments_file_list)
@@ -144,19 +145,29 @@ class MetaLearningOptimizer(object):
         task = OpenMLTask(**task_args)
         dataset = pyMetaLearn.openml.manage_openml_data.get_local_dataset(task.dataset_id)
 
-        all_metafeatures = self.meta_base.get_all_train_metafeatures_as_pandas()
+        logger.info("Going to use the metafeature subset: %s", self.subset)
+        all_metafeatures = self.meta_base\
+            .get_all_train_metafeatures_as_pandas(subset=self.subset)
+        logger.info(" ".join(all_metafeatures.columns))
+
         if self.use_features and \
                 (type(self.use_features) != str or self.use_features != ''):
-            logger.warn("Going to keep the following features %s",
-                    str(self.use_features))
+            #ogger.warn("Going to keep the following features %s",
+            #        str(self.use_features))
             if type(self.use_features) == str:
                 use_features = self.use_features.split(",")
             elif type(self.use_features) in (list, np.ndarray):
                 use_features = self.use_features
             else:
                 raise NotImplementedError(type(self.use_features))
-            keep = [col for col in all_metafeatures.columns if col in use_features]
-            all_metafeatures = all_metafeatures.loc[:,keep]
+
+            if len(use_features) == 0:
+                logger.info("You just tried to remove all metafeatures...")
+            else:
+                keep = [col for col in all_metafeatures.columns if col in use_features]
+                all_metafeatures = all_metafeatures.loc[:,keep]
+                logger.info("Going to keep the following features")
+                logger.info(str(keep))
 
         return self._split_metafeature_array(dataset._name, all_metafeatures)
 
@@ -202,7 +213,12 @@ def parse_parameters(args=None):
     parser.add_argument("-d", "--distance_measure", type=str, default='l1',
                         choices=['l1', 'l2', 'learned', 'random', 'mfs_l1',
                                  'mfw_l1'])
+    parser.add_argument("--metafeatures_subset", type=str, default='all',
+                        choices=["pfahringer_2000_experiment1",
+                                 "all", "yogotama_2014",
+                                 "bardenet_2013_boost", "bardenet_2013_nn"])
     parser.add_argument("--distance_keep_features", type=str, default='',)
+    parser.add_argument("--distance_kwargs", type=str, default='')
     parser.add_argument("--cli_target")
     # parser.add_argument("-p", "--params", required=True)
     parser.add_argument("--cwd", type=str)
@@ -231,10 +247,15 @@ def main():
     with open(args.experiment_files_list) as fh:
         experiment_filenames = fh.readlines()
 
+    if args.distance_kwargs:
+        distance_kwargs = ast.literal_eval(args.distance_kwargs)
+    else:
+        distance_kwargs = None
+
     optimizer = MetaLearningOptimizer(args.task_file, task_filenames,
         experiment_filenames, args.cwd, distance=args.distance_measure,
         seed=args.seed, use_features=args.distance_keep_features,
-        distance_kwargs=None)
+        distance_kwargs=distance_kwargs, subset=args.metafeatures_subset)
     try:
         optimizer.perform_sequential_optimization(
             target_algorithm=fn,

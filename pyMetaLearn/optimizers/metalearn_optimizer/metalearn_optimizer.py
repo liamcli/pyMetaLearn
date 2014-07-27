@@ -40,14 +40,17 @@ def build_metalearn_call(config, options, optimizer_dir):
     call.write(' ' + config.get("METALEARNING", "experiments"))
     call.write(' ' + config.get("EXPERIMENT", "openml_data_dir"))
     call.write(" --distance_measure " + config.get('METALEARNING', 'distance_measure'))
-    if config.has_option('METALEARNING', 'distance_keep_features'):
-        keep = config.get('METALEARNING', 'distance_keep_features')
-        if keep:
-            call.write(' --distance_keep_features ' + keep)
     call.write(" --cli_target " + "'python " + cv_file + "'")
     call.write(" --cwd " + optimizer_dir)
     call.write(" --number_of_jobs " + config.get("HPOLIB", "number_of_jobs"))
     call.write(" --seed " + config.get("HPOLIB", "seed"))
+    if config.has_option('METALEARNING', 'distance_keep_features'):
+        keep = config.get('METALEARNING', 'distance_keep_features')
+        if keep:
+            call.write(' --distance_keep_features ' + keep)
+    if config.has_option('METALEARNING', 'metafeatures_subset'):
+        mf_subset = config.get('METALEARNING', 'metafeatures_subset')
+        call.write(' --metafeatures_subset ' + mf_subset)
 
 
     # seed = config.getint("HPOLIB", "seed")

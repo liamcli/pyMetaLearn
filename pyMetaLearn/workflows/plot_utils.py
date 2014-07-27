@@ -38,34 +38,27 @@ def plot_rankings(trial_list, name_list, optimum=0, title="", log=False,
     length = len(plot_util.extract_trajectory(pickles[optimizers[0]][0]))
     ranking = np.zeros((length, len(name_list)), dtype=np.float64)
 
-    num_products = 0
-    for product in itertools.product(range(num_runs), repeat=len(optimizers)):
-        num_products += 1
+    rs = np.random.RandomState(1)
 
-    keep_probability = 1.0
-    if num_products > 1000:
-        keep_probability = 1000. / float(num_products)
+    combinations = []
+    for j in range(1000):
+        combination = []
+        target = len(optimizers)
+        maximum = num_runs
+        while len(combination) < target:
+            random = rs.randint(maximum)
+            combination.append(random)
 
-    randomness = np.random.random(1000000)
-    print keep_probability
+        combinations.append(np.array(combination))
 
-    for i in range(ranking.shape[0]):
+    for i in range(1, ranking.shape[0]):
         num_products = 0
 
-        # TODO: this should be much faster with Cython
-        j = 0   # should be faster than indexing with modulos
-        for product in itertools.product(range(num_runs), repeat=len(optimizers)):
-            j += 1
-
-            if j >= 999999:
-                j = 0
-
-            if randomness[j] > keep_probability:
-                continue
+        for combination in combinations:
 
             ranks = scipy.stats.rankdata(
                 [np.round(plot_util.get_best(pickles[optimizers[idx]][number], i), 5)
-                 for idx, number in enumerate(product)])
+                 for idx, number in enumerate(combination)])
             num_products += 1
             for j, optimizer in enumerate(optimizers):
                 ranking[i][j] += ranks[j]

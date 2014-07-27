@@ -68,7 +68,7 @@ def create_predict_spearman_rank(metafeatures, experiments, iterator):
 
         experiments_1 = experiments[cross[0]]
         experiments_2 = experiments[cross[1]]
-        assert len(experiments_1) == len(experiments_2)
+        assert len(experiments_1) == len(experiments_2), name
 
         responses_1 = np.zeros((len(experiments_1)), dtype=np.float64)
         responses_2 = np.zeros((len(experiments_1)), dtype=np.float64)

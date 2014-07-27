@@ -785,7 +785,7 @@ pfahringer_2000_experiment2 = set(["landmark_decision_node_learner",
                                    "landmark_1NN"])
 """
 
-# Metafeatures used by Yogotama and Mann (2014)
+# Metafeatures used by Yogatama and Mann (2014)
 subsets["yogotama_2014"] = set(["log_number_of_features",
                                "log_number_of_instances",
                                "number_of_classes"])
@@ -793,7 +793,8 @@ subsets["yogotama_2014"] = set(["log_number_of_features",
 # Metafeatures used by Bardenet et al. (2013) for the AdaBoost.MH experiment
 subsets["bardenet_2013_boost"] = set(["number_of_classes",
                                      "log_number_of_features",
-                                     "log_inverse_dataset_ratio", "pca_95%"])
+                                     "log_inverse_dataset_ratio",
+                                     "pca_95percent"])
 
 # Metafeatures used by Bardenet et al. (2013) for the Neural Net experiment
 subsets["bardenet_2013_nn"] = set(["number_of_classes",

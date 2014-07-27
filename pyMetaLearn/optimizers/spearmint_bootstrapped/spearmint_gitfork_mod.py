@@ -65,15 +65,39 @@ def build_spearmint_call(config, options, optimizer_dir):
     print os.environ['PYTHONPATH']
     call = 'python ' + os.path.join(os.path.dirname(__file__),
                                     'bootstrap_spearmint.py')
-    call = ' '.join([call, os.path.join(optimizer_dir, config.get('SPEARMINT', 'config')),
+    call = ' '.join([call,
+                     config.get("EXPERIMENT", "task_args_pkl"),
+                     config.get("METALEARNING", "tasks"),
+                     config.get("METALEARNING", "experiments"),
+                     config.get("EXPERIMENT", "openml_data_dir"),
+                     os.path.join(optimizer_dir, config.get('SPEARMINT', 'config')),
+                     " --distance_measure " + config.get('METALEARNING', 'distance_measure'),
+                     " --cwd " + optimizer_dir,
+                     " --seed " + config.get("HPOLIB", "seed"),
                      '--driver=local',
                      '--max-concurrent', config.get('HPOLIB', 'number_of_concurrent_jobs'),
                      '--max-finished-jobs', config.get('SPEARMINT', 'max_finished_jobs'),
                      '--polling-time', config.get('SPEARMINT', 'spearmint_polling_time'),
                      '--grid-size', config.get('SPEARMINT', 'grid_size'),
                      '--method',  config.get('SPEARMINT', 'method'),
-                     '--method-args=' + config.get('SPEARMINT', 'method_args'),
+                     '--method-args ' + config.get('SPEARMINT', 'method_args') +
+                        'num_startup_jobs=' + config.get('METALEARNING', "num_bootstrap_examples"),
                      '--grid-seed', str(options.seed)])
+
+    if config.has_option('METALEARNING', 'distance_keep_features'):
+        keep = config.get('METALEARNING', 'distance_keep_features')
+        if keep:
+            call = ' '.join([call, ' --distance_keep_features ' + keep])
+
+    if config.has_option('METALEARNING', 'distance_learner_params'):
+        params = config.get('METALEARNING', 'distance_learner_params')
+        if params:
+            call = ' '.join([call, '--distance_kwargs', params])
+
+    if config.has_option('METALEARNING', 'metafeatures_subset'):
+        mf_subset = config.get('METALEARNING', 'metafeatures_subset')
+        call = ' '.join([call, ' --metafeatures_subset ' + mf_subset])
+
     if config.get('SPEARMINT', 'method') != "GPEIChooser" and \
             config.get('SPEARMINT', 'method') != "GPEIOptChooser":
         logger.warning('WARNING: This chooser might not work yet\n')

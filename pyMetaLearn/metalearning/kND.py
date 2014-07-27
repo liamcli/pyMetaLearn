@@ -55,6 +55,9 @@ class KNearestDatasets(object):
             # import call with which it is possible to import a class which
             # implements the sklearn fit and predict function...
             self.distance_kwargs['random_state'] = self.random_state
+            sys.stderr.write("Going to use the following RF hyperparameters\n")
+            sys.stderr.write(str(self.distance_kwargs) + "\n")
+            sys.stderr.flush()
             self.model = LearnedDistanceRF(**self.distance_kwargs)
             return self.model.fit(metafeatures, runs)
         elif self.distance == 'mfs_l1':
@@ -185,9 +188,9 @@ class KNearestDatasets(object):
 
 
 class LearnedDistanceRF(object):
-    def __init__(self, n_estimators=10, max_features=1.0, min_samples_split=2,
-                 min_samples_leaf=1, n_jobs=2, random_state=None,
-                 oob_score=False):
+    def __init__(self, n_estimators=100, max_features=0.15,
+                 min_samples_split=5, min_samples_leaf=5, n_jobs=1,
+                 random_state=None, oob_score=False):
         if isinstance(random_state, str):
             random_state = int(random_state)
         rs = sklearn.utils.check_random_state(random_state)
