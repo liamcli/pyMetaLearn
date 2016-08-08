@@ -7,6 +7,7 @@ import re
 import StringIO
 import tempfile
 import urllib2
+from urllib import urlencode
 
 import xmltodict
 
@@ -121,7 +122,7 @@ def download_task(tid, cached=True):
     xml_file = os.path.join(task_dir, "tid%d.xml" % tid)
 
     if not cached or not os.path.exists(xml_file):
-        query_url = "http://openml.liacs.nl/api/?f=openml.task.search&task_id=%d"\
+        query_url = "http://api_new.openml.org/v1/task/%d"\
                     % tid
         try:
             task_xml = _read_url(query_url)
@@ -188,8 +189,7 @@ def download(dids, cached=True):
                                  "argument dids %s is a list of integers?" % (did, dids))
 
             print "Fetching dataset id", did,
-            query_url = "http://openml.liacs.nl/api/?f=openml.data" \
-                    ".description&data_id=%d" % did
+            query_url = "http://api_new.openml.org/v1/data/%d" % did
 
             try:
                 dataset_xml = _read_url(query_url)
@@ -211,10 +211,14 @@ def download(dids, cached=True):
     return datasets
 
 def _read_url(url):
+    data={}
+    data['api_key']='insert_priviate_key'
+    data = urlencode(data)
+    data = data.encode('utf-8')
+    connection = urllib2.urlopen(url,data=data)
+    tmp = tempfile.NamedTemporaryFile(mode='w', delete=False)
     CHUNK = 16 * 1024
     string = StringIO.StringIO()
-    connection = urllib2.urlopen(url)
-    tmp = tempfile.NamedTemporaryFile(mode='w', delete=False)
     with tmp as fh:
         while True:
             chunk = connection.read(CHUNK)
